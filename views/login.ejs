@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #6a5af9, #d66efd);
+      }
+
+      .card {
+        background: #ffffff;
+        padding: 40px 36px;
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        width: 100%;
+        max-width: 380px;
+      }
+
+      .card h1 {
+        font-size: 26px;
+        margin-bottom: 6px;
+        color: #1a1a2e;
+      }
+
+      .card p.subtitle {
+        color: #6b7280;
+        font-size: 14px;
+        margin-bottom: 28px;
+      }
+
+      .error-box {
+        background: #fee2e2;
+        color: #b91c1c;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 13px;
+        margin-bottom: 20px;
+      }
+
+      label {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 6px;
+        margin-top: 16px;
+      }
+
+      input {
+        width: 100%;
+        padding: 11px 14px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 14px;
+        outline: none;
+        transition: border-color 0.2s;
+      }
+
+      input:focus {
+        border-color: #6a5af9;
+      }
+
+      button {
+        width: 100%;
+        margin-top: 26px;
+        padding: 12px;
+        background: #6a5af9;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+
+      button:hover {
+        background: #5949e8;
+      }
+
+      .footer-link {
+        text-align: center;
+        margin-top: 22px;
+        font-size: 13px;
+        color: #6b7280;
+      }
+
+      .footer-link a {
+        color: #6a5af9;
+        text-decoration: none;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Welcome back</h1>
+      <p class="subtitle">Login to continue</p>
+
+      <% if (typeof error !== "undefined" && error) { %>
+      <div class="error-box"><%= error %></div>
+      <% } %>
+
+      <form action="/user/login" method="post">
+        <label>Email</label>
+        <input type="text" required name="email" placeholder="you@example.com" />
+
+        <label>Password</label>
+        <input type="password" required name="password" placeholder="••••••••" />
+
+        <button type="submit">Login</button>
+      </form>
+
+      <p class="footer-link">
+        Don't have an account? <a href="/signup">Sign up</a>
+      </p>
+    </div>
+  </body>
+</html>
