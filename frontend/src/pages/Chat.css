@@ -1,0 +1,150 @@
+.chat-container {
+  max-width: 700px;
+  margin: 30px auto;
+  padding: 0 20px;
+}
+
+.chatbox {
+  height: 450px;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 16px;
+  overflow-y: auto;
+  background: #f9fafb;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-empty {
+  color: #9ca3af;
+  text-align: center;
+  margin-top: 180px;
+}
+
+.chat-bubble {
+  align-self: flex-end;
+  background: #6a5af9;
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 12px;
+  max-width: 70%;
+}
+
+.chat-bubble img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin-top: 6px;
+}
+
+.sender-label {
+  display: block;
+  font-size: 11px;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.document-link {
+  display: inline-block;
+  margin-top: 6px;
+  color: #fff;
+  text-decoration: underline;
+  font-size: 13px;
+}
+
+.image-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 6px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  width: fit-content;
+}
+
+.image-preview img {
+  height: 50px;
+  border-radius: 6px;
+}
+
+.image-preview span {
+  cursor: pointer;
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.file-chip {
+  font-size: 13px;
+  color: #374151;
+}
+
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.attach-wrapper {
+  position: relative;
+}
+
+.attach-btn {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 16px;
+  width: auto;
+  margin-top: 0;
+}
+
+.attach-menu {
+  position: absolute;
+  bottom: 48px;
+  left: 0;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  width: 150px;
+  z-index: 10;
+}
+
+.attach-option {
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.attach-option:hover {
+  background: #f3f4f6;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 11px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.send-btn {
+  background: #6a5af9;
+  color: #fff;
+  border: none;
+  padding: 11px 22px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  width: auto;
+  margin-top: 0;
+}
+
+.send-btn:hover {
+  background: #5949e8;
+}
