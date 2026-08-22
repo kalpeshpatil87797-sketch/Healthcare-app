@@ -76,8 +76,13 @@ function Chat() {
         <div className="chatbox">
           {messages.length === 0 && <p className="chat-empty">No messages yet. Say hello!</p>}
           {messages.map((msg) => (
-            <div key={msg._id} className="chat-bubble">
-              <span className="sender-label">{msg.senderEmail}</span>
+            <div
+              key={msg._id}
+              className={`chat-bubble ${msg.senderEmail === "AI Assistant" ? "ai-bubble" : ""}`}
+            >
+              <span className="sender-label">
+                {msg.senderEmail === "AI Assistant" ? "🩺 AI Assistant" : msg.senderEmail}
+              </span>
               {msg.text && <p>{msg.text}</p>}
               {msg.fileType === "image" && <img src={`${API_BASE}${msg.fileUrl}`} alt={msg.fileName} />}
               {msg.fileType === "document" && (

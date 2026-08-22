@@ -157,3 +157,10 @@
   font-size: 13px;
   margin-top: 10px;
 }
+
+.ai-bubble {
+  align-self: flex-start;
+  background: #f3f4f6;
+  color: #1a1a2e;
+  border: 1px solid #d1d5db;
+}

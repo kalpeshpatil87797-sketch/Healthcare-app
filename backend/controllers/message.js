@@ -1,6 +1,7 @@
 const fs = require("fs");
 const Message = require("../models/message");
 const { MAX_IMAGE_SIZE, ALLOWED_IMAGE_TYPES } = require("../middlewares/upload");
+const { getAIhealthResponse } = require("../utils/aiService");
 
 async function handleSendMessage(req, res) {
   const { text } = req.body;
@@ -28,11 +29,25 @@ async function handleSendMessage(req, res) {
   }
 
   const message = await Message.create({ senderEmail, text, fileUrl, fileName, fileType });
+  if(text && text.trim()){
+    try {
+      const aiReplyText = await getAIhealthResponse(text.trim());
+      await Message.create({
+        senderEmail: "AI Assistant",
+        text: aiReplyText,
+        recipientEmail: senderEmail,
+      });
+    }catch(err){
+      console.log("AI response failed", err.message);
+    }
+  }
   return res.status(201).json(message);
 }
 
 async function handleGetMessages(req, res) {
-  const messages = await Message.find({ senderEmail: req.user.email }).sort({ createdAt: 1 });
+  const messages = await Message.find({
+    $or:[{ senderEmail: req.user.email },{recipientEmail:req.user.email}],
+  }).sort({ createdAt: 1 });
   return res.status(200).json(messages);
 }
 
