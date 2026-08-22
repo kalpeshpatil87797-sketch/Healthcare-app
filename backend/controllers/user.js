@@ -17,9 +17,9 @@ async function handleUserSignup(req, res) {
 
 async function handleUserLogin(req, res) {
   const { email, password } = req.body;
-  const user = await User.findOne({ email, password });
+  const user = await User.findOne({ email });
 
-  if (!user) {
+  if (!user || !(await user.comparePassword(password))) {
     return res.status(401).json({ error: "Invalid Username Or Password" });
   }
 
