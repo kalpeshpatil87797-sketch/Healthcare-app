@@ -10,6 +10,7 @@ function Chat() {
   const [text, setText] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [uploadError, setUploadError] = useState("");
 
   const photoInputRef = useRef(null);
   const documentInputRef = useRef(null);
@@ -33,7 +34,11 @@ function Chat() {
 
   function handleFileSelect(e) {
     const file = e.target.files[0];
-    if (file) setSelectedFile(file);
+    if (file){ 
+      setSelectedFile(file);
+      setUploadError("");
+    }
+
     setShowAttachMenu(false);
   }
 
@@ -54,11 +59,12 @@ function Chat() {
       });
       setText("");
       setSelectedFile(null);
+      setUploadError("");
       if (photoInputRef.current) photoInputRef.current.value = "";
       if (documentInputRef.current) documentInputRef.current.value = "";
       fetchMessages();
     } catch (err) {
-      console.log("Failed to send message", err);
+      setUploadError(err.response?.data?.error ?? "Failed to send message");
     }
   }
 
@@ -82,7 +88,7 @@ function Chat() {
             </div>
           ))}
         </div>
-
+        {uploadError && <div className="upload-error">{uploadError}</div>}
         {selectedFile && (
           <div className="image-preview">
             {selectedFile.type.startsWith("image/") ? (

@@ -148,3 +148,12 @@
 .send-btn:hover {
   background: #5949e8;
 }
+
+.upload-error {
+  background: #fee2e2;
+  color: #b91c1c;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-top: 10px;
+}
