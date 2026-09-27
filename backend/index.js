@@ -9,6 +9,8 @@ const { connectToMongoDB } = require("./connect");
 const { checkAuth } = require("./middlewares/auth");
 const userRoute = require("./routes/user");
 const messageRoute = require("./routes/message");
+const doctorRoute = require("./routes/doctor");
+const appointmentRoute = require("./routes/appointment");
 
 const app = express();
 const PORT = 8001;
@@ -39,5 +41,7 @@ app.use("/uploads",
 
 app.use("/user", userRoute);
 app.use("/message", messageRoute);
+app.use("/doctor", doctorRoute);
+app.use("/appointment", appointmentRoute);
 
 app.listen(PORT, () => console.log(`Server Started at PORT:${PORT}`));

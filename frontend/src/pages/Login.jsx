@@ -5,6 +5,7 @@ import "./auth.css";
 
 function Login() {
   const [formData, setFormData] = useState({ email: "", password: "" });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
@@ -37,7 +38,12 @@ function Login() {
           <input type="text" required name="email" placeholder="you@example.com" value={formData.email} onChange={handleChange} />
 
           <label>Password</label>
-          <input type="password" required name="password" placeholder="••••••••" value={formData.password} onChange={handleChange} />
+          <div className="password-field">
+            <input type={showPassword ? "text" : "password"} required name="password" placeholder="••••••••" value={formData.password} onChange={handleChange} />
+            <button type="button" className="password-toggle" onClick={() => setShowPassword(!showPassword)} aria-pressed={showPassword}>
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
 
           <button type="submit">Login</button>
         </form>

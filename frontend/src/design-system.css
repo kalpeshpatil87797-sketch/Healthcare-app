@@ -1,0 +1,358 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+
+/* ============================================================
+  Healthcare App — Care-first visual system
+  ============================================================ */
+
+:root {
+  color-scheme: light;
+  /* ---- Brand / action ---- */
+  --color-primary: #176b5b;
+  --color-primary-hover: #105649;
+  --color-primary-active: #0b433a;
+  --color-primary-soft-bg: #e8f4f0;
+  --color-primary-soft-border: #c1ded4;
+  --color-on-primary: #ffffff;
+  --color-accent: #d98a54;
+  --color-accent-soft: #fbf1e8;
+
+  /* ---- Surfaces & text ---- */
+  --color-background: #f3f7f5;
+  --color-surface: #ffffff;
+  --color-surface-raised: #fbfdfc;
+  --color-text: #18332e;
+  --color-text-secondary: #526762;
+  --color-text-muted: #778984;
+  --color-border: #dce7e2;
+  --color-border-strong: #c4d4cd;
+
+  /* ---- Status ---- */
+  --color-success: #166534;
+  --color-success-bg: #dcfce7;
+  --color-success-border: #bbf7d0;
+  --color-warning: #92400e;
+  --color-warning-bg: #fef3c7;
+  --color-warning-border: #fde68a;
+  --color-error: #b91c1c;
+  --color-error-bg: #fee2e2;
+  --color-error-border: #fecaca;
+
+  /* ---- Focus ---- */
+  --color-focus-ring: rgba(23, 107, 91, 0.22);
+
+  /* ---- Typography ---- */
+  --font-family: "DM Sans", "Segoe UI", sans-serif;
+  --font-family-heading: "Manrope", "DM Sans", sans-serif;
+  --text-xs: 12px;    /* meta labels only, never body copy */
+  --text-sm: 13px;
+  --text-base: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 30px;
+  --leading-body: 1.6;
+  --leading-heading: 1.3;
+
+  /* ---- Spacing ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  /* ---- Shape & elevation ---- */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+  --shadow-sm: 0 2px 8px rgba(24, 51, 46, 0.045);
+  --shadow-md: 0 12px 32px rgba(24, 51, 46, 0.09);
+
+  /* ---- Touch ---- */
+  --tap-min: 44px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-primary: #78c8b0;
+  --color-primary-hover: #91d6c1;
+  --color-primary-active: #a9e2d0;
+  --color-primary-soft-bg: #1b3b34;
+  --color-primary-soft-border: #315f53;
+  --color-on-primary: #102820;
+  --color-accent: #efb486;
+  --color-accent-soft: #392a21;
+
+  --color-background: #101a18;
+  --color-surface: #172320;
+  --color-surface-raised: #1c2b27;
+  --color-text: #e5efeb;
+  --color-text-secondary: #b5c5bf;
+  --color-text-muted: #91a39c;
+  --color-border: #30423c;
+  --color-border-strong: #425750;
+
+  --color-success: #a7ddb0;
+  --color-success-bg: #1d3828;
+  --color-success-border: #355f40;
+  --color-warning: #f0c47d;
+  --color-warning-bg: #382d1d;
+  --color-warning-border: #65502c;
+  --color-error: #f0a09b;
+  --color-error-bg: #3d2525;
+  --color-error-border: #71403e;
+
+  --color-focus-ring: rgba(120, 200, 176, 0.32);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.32);
+}
+
+/* ---- Base typography (foundation; page layouts/colors untouched) ---- */
+body {
+  font-family: var(--font-family);
+  color: var(--color-text);
+  background: var(--color-background);
+  font-size: var(--text-base);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-family-heading);
+  line-height: var(--leading-heading);
+  color: var(--color-text);
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+/* Visible keyboard focus everywhere (a11y) */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Reusable components (opt-in via .ui-* classes)
+   ============================================================ */
+
+/* ---- Buttons ---- */
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: var(--space-3) var(--space-6);
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ui-btn-primary {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.ui-btn-primary:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+}
+
+.ui-btn-primary:active {
+  background: var(--color-primary-active);
+  border-color: var(--color-primary-active);
+}
+
+.ui-btn-secondary {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.ui-btn-secondary:hover {
+  background: var(--color-primary-soft-bg);
+  border-color: var(--color-primary-hover);
+  color: var(--color-primary-hover);
+}
+
+.ui-btn-secondary:active {
+  background: var(--color-primary-soft-bg);
+  border-color: var(--color-primary-active);
+  color: var(--color-primary-active);
+}
+
+.ui-btn:disabled,
+.ui-btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ui-btn-primary:disabled,
+.ui-btn-primary[disabled] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.ui-btn-secondary:disabled,
+.ui-btn-secondary[disabled] {
+  background: var(--color-surface);
+}
+
+/* ---- Form controls ---- */
+.ui-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.ui-input,
+.ui-select {
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: var(--space-3) 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--text-base);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ui-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.ui-input:focus,
+.ui-select:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+}
+
+.ui-input.is-error,
+.ui-select.is-error {
+  border-color: var(--color-error);
+}
+
+.ui-input.is-error:focus,
+.ui-select.is-error:focus {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.15);
+}
+
+.ui-field-error {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-error);
+}
+
+/* ---- Cards ---- */
+.ui-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-6) var(--space-4);
+}
+
+/* ---- Alerts (shape + weight, never color alone) ---- */
+.ui-alert {
+  border: 1px solid var(--color-border);
+  border-left-width: 4px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.ui-alert strong {
+  display: block;
+  margin-bottom: var(--space-1);
+}
+
+.ui-alert-error {
+  background: var(--color-error-bg);
+  border-color: var(--color-error-border);
+  border-left-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.ui-alert-success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  border-left-color: var(--color-success);
+  color: var(--color-success);
+}
+
+.ui-alert-warning {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  border-left-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+/* ---- Badges / status ---- */
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.ui-badge-primary {
+  background: var(--color-primary-soft-bg);
+  border-color: var(--color-primary-soft-border);
+  color: var(--color-primary-hover);
+}
+
+.ui-badge-success {
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+  color: var(--color-success);
+}
+
+.ui-badge-warning {
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+  color: var(--color-warning);
+}
+
+.ui-badge-error {
+  background: var(--color-error-bg);
+  border-color: var(--color-error-border);
+  color: var(--color-error);
+}

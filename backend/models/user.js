@@ -9,6 +9,11 @@ const userSchema = new mongoose.Schema(
     age: { type: Number, required: true },
     phone: { type: String, required: true },
     address: { type: String, required: true },
+    role: { type: String, enum: ["patient", "doctor"], default: "patient" },
+    location: {
+      latitude: { type: Number, min: -90, max: 90 },
+      longitude: { type: Number, min: -180, max: 180 },
+    },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
   },

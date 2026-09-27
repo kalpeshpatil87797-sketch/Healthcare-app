@@ -10,11 +10,14 @@ function handleUpload(req, res, next) {
   upload.single("file")(req, res, (err) => {
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {
-        return res.status(400).json({ error: "File is too large (max 10MB)" });
+        return res.status(400).json({ error: "File is too large." });
       }
-      return res.status(400).json({ error: err.message });
+      return res.status(400).json({ error: "File upload failed. Please try again." });
     } else if (err) {
-      return res.status(400).json({ error: err.message });
+      if (err.code === "UNSUPPORTED_FILE_TYPE") {
+        return res.status(400).json({ error: "This file type is not supported." });
+      }
+      return res.status(400).json({ error: "File upload failed. Please try again." });
     }
     next();
   });
