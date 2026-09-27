@@ -1,15 +1,120 @@
 import { useState, useRef, useEffect } from "react";
 import Layout from "../components/Layout";
 import MedicineDetailModal, { familyForProduct } from "../components/MedicineDetailModal";
+import AppointmentModal from "../components/AppointmentModal";
+import AlternateTimeModal from "../components/AlternateTimeModal";
+import AppointmentCard from "../components/AppointmentCard";
 import axios from "axios";
 import { SPECIALTIES } from "../utils/specialties";
 import { PRODUCTS, CATEGORIES } from "../data/medicines";
 import "./Chat.css";
+import "./ChatTheme.css";
 
 const API_BASE = "http://localhost:8001";
 
+// Patient ↔ Doctor chat attachments (images + PDF only). Mirrors the
+// backend allowlist in backend/middlewares/upload.js — keep both in sync.
+const CHAT_IMAGE_MIMES = ["image/jpeg", "image/png", "image/webp"];
+const CHAT_IMAGE_ACCEPT = "image/jpeg,image/png,image/webp";
+const CHAT_DOC_ACCEPT = "application/pdf,.pdf";
+const CHAT_MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
+const CHAT_MAX_DOC_SIZE = 10 * 1024 * 1024; // 10 MB
+
+function chatFileKind(file) {
+  if (!file) return null;
+  if (file.type && file.type.startsWith("image/")) return "image";
+  const name = String(file.name || "").toLowerCase();
+  if ((file.type === "application/pdf" || !file.type) && name.endsWith(".pdf")) return "document";
+  if (file.type === "application/pdf") return "document";
+  return null;
+}
+
+// Client-side guard only — the backend re-validates MIME type, extension
+// and size and is the authority. Returns "" when the file looks fine.
+function validateChatAttachment(file) {
+  if (!file) return "";
+  const ext = String(file.name || "").toLowerCase().split(".").pop();
+  const isImage = CHAT_IMAGE_MIMES.includes(file.type) && ["jpg", "jpeg", "png", "webp"].includes(ext);
+  const isPdf = file.type === "application/pdf" && ext === "pdf";
+  if (!isImage && !isPdf) return "This file type is not supported.";
+  const limit = isImage ? CHAT_MAX_IMAGE_SIZE : CHAT_MAX_DOC_SIZE;
+  if (file.size > limit) return "File is too large.";
+  return "";
+}
+
+function formatChatFileSize(size) {
+  if (size === undefined || size === null) return "";
+  const kb = size / 1024;
+  if (kb < 1024) return `${Math.max(1, Math.round(kb))} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
+}
+
+// Attachment body shared by both sides of the Patient ↔ Doctor chat.
+// Text-only history (no fileUrl) renders exactly as before; image messages
+// show a contained preview, PDF messages a compact card with an Open action.
+function renderChatAttachment(msg) {
+  if (!msg || !msg.fileUrl) return null;
+  const url = `${API_BASE}${msg.fileUrl}`;
+  if (msg.fileType === "image") {
+    return (
+      <a href={url} target="_blank" rel="noreferrer" aria-label={`Open image ${msg.fileName || "attachment"}`}>
+        <img className="msg-attach-img" src={url} alt={msg.fileName || "Shared image"} loading="lazy" />
+      </a>
+    );
+  }
+  if (msg.fileType === "document") {
+    return (
+      <div className="msg-doc-card">
+        <span className="msg-doc-icon" aria-hidden="true">📄</span>
+        <span className="msg-doc-info">
+          <span className="msg-doc-name">{msg.fileName || "Document.pdf"}</span>
+          {msg.fileSize ? <span className="msg-doc-size">{formatChatFileSize(msg.fileSize)}</span> : null}
+        </span>
+        <a className="msg-doc-open" href={url} target="_blank" rel="noreferrer">
+          Open
+        </a>
+      </div>
+    );
+  }
+  return null;
+}
+
+// Pending-attachment preview shown above the input before sending.
+// Images get a thumbnail, PDFs an icon + filename; ✕ removes the file.
+function ChatAttachPreview({ file, onRemove }) {
+  if (!file) return null;
+  const kind = chatFileKind(file);
+  return (
+    <div className="image-preview chat-attach-preview">
+      {kind === "image" ? (
+        <img src={URL.createObjectURL(file)} alt="Attachment preview" />
+      ) : (
+        <span className="file-chip">📄 {file.name}</span>
+      )}
+      <span onClick={onRemove} role="button" tabIndex={0} aria-label="Remove attachment"
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onRemove(); } }}>
+        ✕
+      </span>
+    </div>
+  );
+}
+
 // Render AI health replies with readable headings + bullets.
 // Keeps plain text for user/doctor messages; only formats AI bubbles.
+// Section headings get a small icon purely for visual separation —
+// the AI-generated text itself is never modified.
+const AI_HEADING_ICONS = [
+  [/possible condition/i, "🩺"],
+  [/why.*happen/i, "🔍"],
+  [/home precaution/i, "🏠"],
+  [/which doctor|doctor to visit/i, "👩‍⚕️"],
+  [/urgent|emergency/i, "⚠️"],
+];
+
+function aiHeadingIcon(title) {
+  const found = AI_HEADING_ICONS.find(([re]) => re.test(title));
+  return found ? found[1] : null;
+}
 function renderAiText(text) {
   const lines = String(text ?? "").split("\n");
   const nodes = [];
@@ -37,8 +142,14 @@ function renderAiText(text) {
     const headingMatch = trimmed.match(/^([1-5])\.\s*(.+)$/);
     if (headingMatch) {
       flushBullets(`h-${idx}`);
+      const icon = aiHeadingIcon(headingMatch[2]);
       nodes.push(
         <div key={`h-${idx}`} className="ai-heading">
+          {icon && (
+            <span className="ai-heading-icon" aria-hidden="true">
+              {icon}
+            </span>
+          )}
           {headingMatch[1]}. {headingMatch[2]}
         </div>
       );
@@ -270,6 +381,7 @@ function renderMedicineCard(med, onOpen) {
         </div>
       ))}
       <div className="med-card-note">Info only — no dosage prescribed. Your doctor will advise dosage and frequency.</div>
+      {onOpen && <div className="med-card-hint">Tap to view details</div>}
     </div>
   );
 }
@@ -291,6 +403,17 @@ function DoctorMedComposer({
   onSelectProduct,
   onSend,
   inputRef,
+  attachFile,
+  attachMenuOpen,
+  onToggleAttachMenu,
+  onPickPhoto,
+  onPickDoc,
+  onRemoveAttachFile,
+  photoInputRef,
+  docInputRef,
+  onPhotoFile,
+  onDocFile,
+  attachDisabled,
 }) {
   // Cursor-aware detection: the /med/ command nearest to (at or before) the
   // cursor, wherever it appears in the input — not only at the start.
@@ -338,7 +461,27 @@ function DoctorMedComposer({
           ))}
         </ul>
       )}
-      <form className="chat-input-row" onSubmit={onSend}>
+      <ChatAttachPreview file={attachFile} onRemove={onRemoveAttachFile} />
+      <form className="chat-input-row dm-input-row" onSubmit={onSend}>
+        <div className="attach-wrapper">
+          <button
+            type="button"
+            className="attach-btn"
+            onClick={onToggleAttachMenu}
+            disabled={attachDisabled || patientConvoSending}
+            aria-label="Attach a file"
+          >
+            📎
+          </button>
+          {attachMenuOpen && (
+            <div className="attach-menu">
+              <div className="attach-option" onClick={onPickPhoto}>🖼️ Photo</div>
+              <div className="attach-option" onClick={onPickDoc}>📄 Document</div>
+            </div>
+          )}
+          <input type="file" accept={CHAT_IMAGE_ACCEPT} ref={photoInputRef} onChange={onPhotoFile} style={{ display: "none" }} />
+          <input type="file" accept={CHAT_DOC_ACCEPT} ref={docInputRef} onChange={onDocFile} style={{ display: "none" }} />
+        </div>
         <input
           type="text"
           ref={inputRef}
@@ -352,7 +495,7 @@ function DoctorMedComposer({
           disabled={patientConvoSending}
         />
         <button type="submit" className="send-btn" disabled={patientConvoSending}>
-          {patientConvoSending ? "Sending..." : "Send"}
+          {patientConvoSending ? (attachFile ? "Uploading..." : "Sending...") : "Send"}
         </button>
       </form>
     </div>
@@ -391,6 +534,12 @@ function Chat() {
   const [patientConvoText, setPatientConvoText] = useState("");
   const [patientConvoSending, setPatientConvoSending] = useState(false);
   const [patientConvoError, setPatientConvoError] = useState("");
+  // Pending attachments for the Patient ↔ Doctor chat (one per side).
+  // Nothing sends until Send is pressed; ✕ clears the selection.
+  const [convoFile, setConvoFile] = useState(null);
+  const [showConvoAttachMenu, setShowConvoAttachMenu] = useState(false);
+  const [patientConvoFile, setPatientConvoFile] = useState(null);
+  const [showPatientAttachMenu, setShowPatientAttachMenu] = useState(false);
   // Doctor-only /med/ autocomplete state (doctor typebox with a patient only).
   // selectedMeds keeps one snapshot per chosen product for the internal
   // type:"medicine" payload; the visible text holds the exact names.
@@ -401,11 +550,30 @@ function Chat() {
   // Snapshot for the in-chat medicine details modal (one card → its own
   // details). Null means closed; stays on the chat page, never navigates.
   const [detailMed, setDetailMed] = useState(null);
+  // Doctor whose appointment popup is open (STEP 1: UI only, no backend).
+  // Null means closed; the modal remounts fresh on every open.
+  const [appointmentDoctor, setAppointmentDoctor] = useState(null);
+  // Appointment card actions: alternate modal target + in-flight action id.
+  // Cards themselves re-render through the existing message refetch.
+  const [alternateFor, setAlternateFor] = useState(null);
+  const [apptActingId, setApptActingId] = useState(null);
 
   const photoInputRef = useRef(null);
   const documentInputRef = useRef(null);
+  const convoPhotoRef = useRef(null);
+  const convoDocRef = useRef(null);
+  const patientPhotoRef = useRef(null);
+  const patientDocRef = useRef(null);
   const doctorInputRef = useRef(null);
+  const aiInputRef = useRef(null);
   const token = localStorage.getItem("token");
+
+  // Empty-state suggestion chips only fill the existing AI input —
+  // sending still goes through the normal Send flow.
+  function handleSuggestionChip(label) {
+    setText(label);
+    aiInputRef.current?.focus();
+  }
 
   function getMyEmail() {
     try {
@@ -498,6 +666,32 @@ function Chat() {
       setUploadError("");
     }
     setShowAttachMenu(false);
+  }
+
+  // Shared picker for the Patient ↔ Doctor chat: validate client-side
+  // (backend re-validates), keep the file pending until Send is pressed.
+  function handleConvoFileSelect(e, setFile, setMenu, setError) {
+    const file = e.target.files[0];
+    e.target.value = "";
+    setMenu(false);
+    if (!file) return;
+    const problem = validateChatAttachment(file);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setError("");
+    setFile(file);
+  }
+
+  function clearConvoFileInput() {
+    if (convoPhotoRef.current) convoPhotoRef.current.value = "";
+    if (convoDocRef.current) convoDocRef.current.value = "";
+  }
+
+  function clearPatientFileInput() {
+    if (patientPhotoRef.current) patientPhotoRef.current.value = "";
+    if (patientDocRef.current) patientDocRef.current.value = "";
   }
 
   function handleFindNearbyDoctors() {
@@ -597,10 +791,18 @@ function Chat() {
   }
 
   function handleOpenMyDoctorChat(doctor) {
-    setConnectedDoctor({ _id: doctor._id, name: doctor.name, specialist: doctor.specialist });
+    setConnectedDoctor({
+      _id: doctor._id,
+      name: doctor.name,
+      specialist: doctor.specialist,
+      clinicName: doctor.clinicName,
+      isAvailable: doctor.isAvailable,
+    });
     setConvoMessages([]);
     setConvoText("");
     setConvoError("");
+    setConvoFile(null);
+    setShowConvoAttachMenu(false);
     fetchConvoMessages(doctor._id);
   }
 
@@ -626,6 +828,8 @@ function Chat() {
     setMedIndex(0);
     setMedCursor(null);
     setMedDismissed(null);
+    setPatientConvoFile(null);
+    setShowPatientAttachMenu(false);
     fetchPatientConvo(patient.patientId);
   }
 
@@ -728,33 +932,51 @@ function Chat() {
       setPatientConvoError("Select a medicine from the suggestions, or delete the /med command to send.");
       return;
     }
-    if (!patientConvoText.trim() && selectedMeds.length === 0) return;
+    if (!patientConvoText.trim() && selectedMeds.length === 0 && !patientConvoFile) return;
+    if (patientConvoFile && selectedMeds.length > 0) {
+      setPatientConvoError("Attachments cannot be combined with medicine cards.");
+      return;
+    }
     setPatientConvoSending(true);
     try {
       const note = patientConvoText.trim() || selectedMeds.map((m) => getSnapshotDisplayName(m)).join(", ");
-      await axios.post(
-        `${API_BASE}/message/send`,
-        selectedMeds.length > 0
-          ? {
-              text: note,
-              type: "medicine",
-              medicine: selectedMeds[selectedMeds.length - 1],
-              medicines: selectedMeds,
-              doctorId: myDoctorId,
-              patientId: selectedPatient.patientId,
-            }
-          : { text: note, doctorId: myDoctorId, patientId: selectedPatient.patientId },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      if (patientConvoFile) {
+        const formData = new FormData();
+        formData.append("text", note);
+        formData.append("file", patientConvoFile);
+        formData.append("doctorId", myDoctorId);
+        formData.append("patientId", selectedPatient.patientId);
+        await axios.post(`${API_BASE}/message/send`, formData, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+        });
+      } else {
+        await axios.post(
+          `${API_BASE}/message/send`,
+          selectedMeds.length > 0
+            ? {
+                text: note,
+                type: "medicine",
+                medicine: selectedMeds[selectedMeds.length - 1],
+                medicines: selectedMeds,
+                doctorId: myDoctorId,
+                patientId: selectedPatient.patientId,
+              }
+            : { text: note, doctorId: myDoctorId, patientId: selectedPatient.patientId },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
       setPatientConvoText("");
+      setPatientConvoFile(null);
+      clearPatientFileInput();
       setSelectedMeds([]);
       setMedIndex(0);
       setMedCursor(null);
       setMedDismissed(null);
+      setShowPatientAttachMenu(false);
       setPatientConvoError("");
       await fetchPatientConvo(selectedPatient.patientId);
     } catch (err) {
-      setPatientConvoError(err.response?.data?.error ?? "Failed to send message");
+      setPatientConvoError(err.response?.data?.error ?? "File upload failed. Please try again.");
     } finally {
       setPatientConvoSending(false);
     }
@@ -762,21 +984,75 @@ function Chat() {
 
   async function handleConvoSend(e) {
     e.preventDefault();
-    if (!convoText.trim() || convoSending || !connectedDoctor) return;
+    if (convoSending || !connectedDoctor) return;
+    if (!convoText.trim() && !convoFile) return;
     setConvoSending(true);
     try {
-      await axios.post(
-        `${API_BASE}/message/send`,
-        { text: convoText.trim(), doctorId: connectedDoctor._id },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      // Text-only keeps the original JSON path; attachments use multipart.
+      if (convoFile) {
+        const formData = new FormData();
+        formData.append("text", convoText.trim());
+        formData.append("file", convoFile);
+        formData.append("doctorId", connectedDoctor._id);
+        await axios.post(`${API_BASE}/message/send`, formData, {
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "multipart/form-data" },
+        });
+      } else {
+        await axios.post(
+          `${API_BASE}/message/send`,
+          { text: convoText.trim(), doctorId: connectedDoctor._id },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+      }
       setConvoText("");
+      setConvoFile(null);
+      clearConvoFileInput();
+      setShowConvoAttachMenu(false);
       setConvoError("");
       await fetchConvoMessages(connectedDoctor._id);
     } catch (err) {
-      setConvoError(err.response?.data?.error ?? "Failed to send message");
+      setConvoError(err.response?.data?.error ?? "File upload failed. Please try again.");
     } finally {
       setConvoSending(false);
+    }
+  }
+
+  // Appointment card actions (STEP 3). Doctor accept/reject and patient
+  // alternate-accept call the STEP 2 APIs, then reload messages through
+  // the existing fetch so cards update — no second realtime system.
+  async function handleAppointmentRespond(appointmentId, action) {
+    if (apptActingId || !selectedPatient) return;
+    setApptActingId(String(appointmentId));
+    try {
+      await axios.patch(
+        `${API_BASE}/appointment/${appointmentId}/respond`,
+        { action },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setPatientConvoError("");
+      await fetchPatientConvo(selectedPatient.patientId);
+    } catch (err) {
+      setPatientConvoError(err.response?.data?.error ?? "Failed to update appointment. Please try again.");
+    } finally {
+      setApptActingId(null);
+    }
+  }
+
+  async function handleAcceptAlternate(appointmentId) {
+    if (apptActingId || !connectedDoctor) return;
+    setApptActingId(String(appointmentId));
+    try {
+      await axios.patch(
+        `${API_BASE}/appointment/${appointmentId}/accept-alternate`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setConvoError("");
+      await fetchConvoMessages(connectedDoctor._id);
+    } catch (err) {
+      setConvoError(err.response?.data?.error ?? "Failed to accept alternate time. Please try again.");
+    } finally {
+      setApptActingId(null);
     }
   }
 
@@ -842,12 +1118,39 @@ function Chat() {
             <div className="chat-main">
               {activeTab === "ai" ? (
                 <>
-                  <div className="chatbox">
-                    {messages.length === 0 && <p className="chat-empty">No messages yet. Say hello!</p>}
+                  <div className="ai-header">
+                    <span className="ai-header-icon" aria-hidden="true">🤖</span>
+                    <div className="ai-header-text">
+                      <h2>AI Health Assistant</h2>
+                      <p>General health information and guidance</p>
+                    </div>
+                  </div>
+                  <div className="chatbox ai-chatbox">
+                    {messages.length === 0 && (
+                      <div className="ai-empty">
+                        <span className="ai-empty-icon" aria-hidden="true">🩺</span>
+                        <p className="ai-empty-title">How can I help you today?</p>
+                        <p className="ai-empty-sub">
+                          Describe your symptoms or health concern to get general health information.
+                        </p>
+                        <div className="ai-chips">
+                          {["Headache", "Fever", "Cough", "Stomach pain"].map((s) => (
+                            <button
+                              key={s}
+                              type="button"
+                              className="ai-chip"
+                              onClick={() => handleSuggestionChip(s)}
+                            >
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {messages.map((msg) => (
-                      <div key={msg._id} className={`chat-bubble ${msg.senderEmail === "AI Assistant" ? "ai-bubble" : ""}`}>
+                      <div key={msg._id} className={`chat-bubble ${msg.senderEmail === "AI Assistant" ? "ai-bubble ai-msg" : "user-msg"}`}>
                         <span className="sender-label">
-                          {msg.senderEmail === "AI Assistant" ? "🩺 AI Assistant" : msg.senderEmail}
+                          {msg.senderEmail === "AI Assistant" ? "🩺 AI Assistant" : "You"}
                         </span>
                         {msg.senderEmail === "AI Assistant" && msg.text ? (
                           <div className="ai-formatted">{renderAiText(msg.text)}</div>
@@ -863,13 +1166,20 @@ function Chat() {
                       </div>
                     ))}
                     {isSending && text.trim() && (
-                      <div className="chat-bubble ai-bubble">
+                      <div className="chat-bubble ai-bubble ai-msg ai-thinking">
                         <span className="sender-label">🩺 AI Assistant</span>
-                        <p>AI is thinking...</p>
+                        <p>
+                          <span className="typing-dots" aria-hidden="true">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </span>{" "}
+                          AI Assistant is thinking...
+                        </p>
                       </div>
                     )}
                   </div>
-                  {uploadError && <div className="upload-error">{uploadError}</div>}
+                  {uploadError && <div className="upload-error ai-error">{uploadError}</div>}
                   {selectedFile && (
                     <div className="image-preview">
                       {selectedFile.type.startsWith("image/") ? <img src={URL.createObjectURL(selectedFile)} alt="preview" /> : <span className="file-chip">📄 {selectedFile.name}</span>}
@@ -877,7 +1187,7 @@ function Chat() {
                     </div>
                   )}
 
-                  <form className="chat-input-row" onSubmit={handleSend}>
+                  <form className="chat-input-row ai-input-row" onSubmit={handleSend}>
                     <div className="attach-wrapper">
                       <button type="button" className="attach-btn" onClick={() => setShowAttachMenu(!showAttachMenu)} disabled={isSending}>📎</button>
                       {showAttachMenu && (
@@ -889,9 +1199,12 @@ function Chat() {
                       <input type="file" accept="image/*" ref={photoInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
                       <input type="file" accept=".pdf,.doc,.docx,.txt" ref={documentInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
                     </div>
-                    <input type="text" className="chat-input" placeholder="Type a message..." value={text} onChange={(e) => setText(e.target.value)} disabled={isSending} />
+                    <input type="text" ref={aiInputRef} className="chat-input" placeholder="Describe your symptoms..." value={text} onChange={(e) => setText(e.target.value)} disabled={isSending} />
                     <button type="submit" className="send-btn" disabled={isSending}>{isSending ? "Sending..." : "Send"}</button>
                   </form>
+                  <p className="ai-disclaimer">
+                    AI-generated information is for general guidance and is not a substitute for professional medical care.
+                  </p>
                 </>
               ) : role === "doctor" ? (
                 selectedPatient ? (
@@ -901,6 +1214,9 @@ function Chat() {
                         <button type="button" className="doctor-back-btn" onClick={() => setSelectedPatient(null)}>
                           ← Back
                         </button>
+                        <span className="dm-avatar" aria-hidden="true">
+                          {(selectedPatient.name || "?").trim().charAt(0).toUpperCase()}
+                        </span>
                         <div>
                           <h3 style={{ margin: 0 }}>{selectedPatient.name}</h3>
                           <p className="doctor-specialist" style={{ margin: 0 }}>
@@ -908,14 +1224,30 @@ function Chat() {
                           </p>
                         </div>
                       </div>
-                      {patientConvo.length === 0 && <p className="chat-empty">No messages yet.</p>}
+                      {patientConvo.length === 0 && (
+                        <div className="dm-empty">
+                          <span className="dm-empty-icon" aria-hidden="true">💬</span>
+                          <p className="dm-empty-title">Start the conversation.</p>
+                          <p className="dm-empty-sub">Messages with {selectedPatient.name} will appear here.</p>
+                        </div>
+                      )}
                       {patientConvo.map((msg) => {
                         const isMine = msg.senderEmail === myEmail;
                         const meds = medListOf(msg);
                         return (
                           <div key={msg._id} className={`chat-bubble ${isMine ? "" : "ai-bubble"}`}>
                             <span className="sender-label">{isMine ? "You" : msg.senderEmail}</span>
-                            {msg.type === "medicine" && meds.length > 0 ? (
+                            {msg.type === "appointment" ? (
+                              <AppointmentCard
+                                msg={msg}
+                                isDoctorView
+                                patientName={selectedPatient.name}
+                                acting={apptActingId}
+                                onAccept={(id) => handleAppointmentRespond(id, "accept")}
+                                onReject={(id) => handleAppointmentRespond(id, "reject")}
+                                onAlternate={(id) => setAlternateFor(id)}
+                              />
+                            ) : msg.type === "medicine" && meds.length > 0 ? (
                               <>
                                 {showMedText(msg, meds) && <p>{msg.text}</p>}
                                 {meds.map((m, i) => (
@@ -925,6 +1257,7 @@ function Chat() {
                             ) : (
                               msg.text && <p>{msg.text}</p>
                             )}
+                            {renderChatAttachment(msg)}
                           </div>
                         );
                       })}
@@ -944,24 +1277,54 @@ function Chat() {
                       onSelectProduct={selectMedProduct}
                       onSend={handlePatientConvoSend}
                       inputRef={doctorInputRef}
+                      attachFile={patientConvoFile}
+                      attachMenuOpen={showPatientAttachMenu}
+                      onToggleAttachMenu={() => setShowPatientAttachMenu((v) => !v)}
+                      onPickPhoto={() => patientPhotoRef.current?.click()}
+                      onPickDoc={() => patientDocRef.current?.click()}
+                      onRemoveAttachFile={() => { setPatientConvoFile(null); clearPatientFileInput(); }}
+                      photoInputRef={patientPhotoRef}
+                      docInputRef={patientDocRef}
+                      onPhotoFile={(e) => handleConvoFileSelect(e, setPatientConvoFile, setShowPatientAttachMenu, setPatientConvoError)}
+                      onDocFile={(e) => handleConvoFileSelect(e, setPatientConvoFile, setShowPatientAttachMenu, setPatientConvoError)}
+                      attachDisabled={patientConvoSending}
                     />
                   </>
                 ) : (
-                  <div className="chatbox">
-                    <p style={{ margin: 0, color: "#1a1a2e", fontWeight: 600, fontSize: "15px" }}>
-                      My Patients
-                    </p>
-                    {patientsLoading && <p style={{ margin: 0, color: "#374151", fontSize: "14px" }}>Loading patients...</p>}
-                    {!patientsLoading && patientsMessage && (
-                      <p style={{ margin: 0, color: "#374151", fontSize: "14px" }}>{patientsMessage}</p>
+                  <div className="chatbox dm-list">
+                    <div className="dm-list-header">
+                      <h3>My Patients</h3>
+                      <p>Patients connected with you</p>
+                    </div>
+                    {patientsLoading && (
+                      <div className="dm-loading">
+                        <span className="typing-dots" aria-hidden="true">
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                        </span>{" "}
+                        Loading conversations...
+                      </div>
+                    )}
+                    {!patientsLoading && patientsMessage && patients.length === 0 && (
+                      <div className="dm-empty">
+                        <span className="dm-empty-icon" aria-hidden="true">👥</span>
+                        <p className="dm-empty-title">No patients connected yet.</p>
+                        <p className="dm-empty-sub">When a patient connects with you, they will appear here.</p>
+                      </div>
                     )}
                     {!patientsLoading &&
                       patients.map((p) => (
-                        <div key={p.patientId} className="doctor-card">
-                          <h3>{p.name}</h3>
-                          {p.age !== undefined && <p>Age: {p.age}</p>}
+                        <div key={p.patientId} className="doctor-card dm-person-card">
+                          <span className="dm-avatar" aria-hidden="true">
+                            {(p.name || "?").trim().charAt(0).toUpperCase()}
+                          </span>
+                          <div className="dm-person-info">
+                            <h3>{p.name}</h3>
+                            {p.age !== undefined && <p>Age: {p.age}</p>}
+                          </div>
                           <button type="button" className="doctor-connect-btn" onClick={() => handleOpenPatientChat(p)}>
-                            Open Chat
+                            Chat
                           </button>
                         </div>
                       ))}
@@ -974,19 +1337,46 @@ function Chat() {
                       <button type="button" className="doctor-back-btn" onClick={() => setConnectedDoctor(null)}>
                         ← Back
                       </button>
+                      <span className="dm-avatar" aria-hidden="true">
+                        {(connectedDoctor.name || "?").trim().charAt(0).toUpperCase()}
+                      </span>
                       <div>
-                        <h3 style={{ margin: 0 }}>{connectedDoctor.name}</h3>
-                        <p className="doctor-specialist" style={{ margin: 0 }}>{connectedDoctor.specialist}</p>
+                        <h3 style={{ margin: 0 }}>
+                          {connectedDoctor.name}{" "}
+                          {connectedDoctor.isAvailable === true && (
+                            <span className="dm-status-dot" title="Available">
+                              <span aria-hidden="true">●</span> Available
+                            </span>
+                          )}
+                        </h3>
+                        <p className="doctor-specialist" style={{ margin: 0 }}>
+                          {connectedDoctor.specialist}
+                          {connectedDoctor.clinicName ? ` · ${connectedDoctor.clinicName}` : ""}
+                        </p>
                       </div>
                     </div>
-                    {convoMessages.length === 0 && <p className="chat-empty">Say hello to {connectedDoctor.name}!</p>}
+                    {convoMessages.length === 0 && (
+                      <div className="dm-empty">
+                        <span className="dm-empty-icon" aria-hidden="true">💬</span>
+                        <p className="dm-empty-title">Start the conversation.</p>
+                        <p className="dm-empty-sub">Say hello to {connectedDoctor.name}!</p>
+                      </div>
+                    )}
                     {convoMessages.map((msg) => {
                       const isMine = msg.senderEmail === myEmail;
                       const meds = medListOf(msg);
                       return (
                         <div key={msg._id} className={`chat-bubble ${isMine ? "" : "ai-bubble"}`}>
                           <span className="sender-label">{isMine ? "You" : msg.senderEmail}</span>
-                          {msg.type === "medicine" && meds.length > 0 ? (
+                          {msg.type === "appointment" ? (
+                            <AppointmentCard
+                              msg={msg}
+                              isDoctorView={false}
+                              acting={apptActingId}
+                              onAcceptAlternate={(id) => handleAcceptAlternate(id)}
+                              onChooseAnother={() => setAppointmentDoctor(connectedDoctor)}
+                            />
+                          ) : msg.type === "medicine" && meds.length > 0 ? (
                             <>
                               {showMedText(msg, meds) && <p>{msg.text}</p>}
                               {meds.map((m, i) => (
@@ -996,12 +1386,33 @@ function Chat() {
                           ) : (
                             msg.text && <p>{msg.text}</p>
                           )}
+                          {renderChatAttachment(msg)}
                         </div>
                       );
                     })}
                   </div>
                   {convoError && <div className="upload-error">{convoError}</div>}
-                  <form className="chat-input-row" onSubmit={handleConvoSend}>
+                  <ChatAttachPreview file={convoFile} onRemove={() => { setConvoFile(null); clearConvoFileInput(); }} />
+                  <form className="chat-input-row dm-input-row" onSubmit={handleConvoSend}>
+                    <div className="attach-wrapper">
+                      <button
+                        type="button"
+                        className="attach-btn"
+                        onClick={() => setShowConvoAttachMenu((v) => !v)}
+                        disabled={convoSending}
+                        aria-label="Attach a file"
+                      >
+                        📎
+                      </button>
+                      {showConvoAttachMenu && (
+                        <div className="attach-menu">
+                          <div className="attach-option" onClick={() => convoPhotoRef.current?.click()}>🖼️ Photo</div>
+                          <div className="attach-option" onClick={() => convoDocRef.current?.click()}>📄 Document</div>
+                        </div>
+                      )}
+                      <input type="file" accept={CHAT_IMAGE_ACCEPT} ref={convoPhotoRef} onChange={(e) => handleConvoFileSelect(e, setConvoFile, setShowConvoAttachMenu, setConvoError)} style={{ display: "none" }} />
+                      <input type="file" accept={CHAT_DOC_ACCEPT} ref={convoDocRef} onChange={(e) => handleConvoFileSelect(e, setConvoFile, setShowConvoAttachMenu, setConvoError)} style={{ display: "none" }} />
+                    </div>
                     <input
                       type="text"
                       className="chat-input"
@@ -1011,34 +1422,69 @@ function Chat() {
                       disabled={convoSending}
                     />
                     <button type="submit" className="send-btn" disabled={convoSending}>
-                      {convoSending ? "Sending..." : "Send"}
+                      {convoSending ? (convoFile ? "Uploading..." : "Sending...") : "Send"}
                     </button>
                   </form>
                 </>
               ) : activeTab === "mydoctor" ? (
-                <div className="chatbox">
-                  <p style={{ margin: 0, color: "#1a1a2e", fontWeight: 600, fontSize: "15px" }}>
-                    My Doctor
-                  </p>
-                  {myDoctorsLoading && <p style={{ margin: 0, color: "#374151", fontSize: "14px" }}>Loading your doctors...</p>}
-                  {!myDoctorsLoading && myDoctorsMessage && (
-                    <p style={{ margin: 0, color: "#374151", fontSize: "14px" }}>{myDoctorsMessage}</p>
+                <div className="chatbox dm-list">
+                  <div className="dm-list-header">
+                    <h3>My Doctor</h3>
+                    <p>Doctors you are connected with</p>
+                  </div>
+                  {myDoctorsLoading && (
+                    <div className="dm-loading">
+                      <span className="typing-dots" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                      </span>{" "}
+                      Loading conversations...
+                    </div>
+                  )}
+                  {!myDoctorsLoading && myDoctorsMessage && myDoctors.length === 0 && (
+                    <div className="dm-empty">
+                      <span className="dm-empty-icon" aria-hidden="true">👩‍⚕️</span>
+                      <p className="dm-empty-title">No doctor connected yet.</p>
+                      <p className="dm-empty-sub">Find an available doctor nearby to start chatting.</p>
+                      <button type="button" className="doctor-find-btn" onClick={() => setActiveTab("doctor")}>
+                        Find a Doctor
+                      </button>
+                    </div>
                   )}
                   {!myDoctorsLoading &&
                     myDoctors.map((d) => (
-                      <div key={d._id} className="doctor-card">
-                        <h3>{d.name}</h3>
-                        <p className="doctor-specialist">{d.specialist}</p>
-                        <p>🏥 {d.clinicName}</p>
-                        <button type="button" className="doctor-connect-btn" onClick={() => handleOpenMyDoctorChat(d)}>
-                          Open Chat
-                        </button>
+                      <div key={d._id} className="doctor-card dm-person-card">
+                        <span className="dm-avatar" aria-hidden="true">
+                          {(d.name || "?").trim().charAt(0).toUpperCase()}
+                        </span>
+                        <div className="dm-person-info">
+                          <h3>
+                            {d.name}{" "}
+                            {d.isAvailable === true && (
+                              <span className="dm-status-dot" title="Available">
+                                <span aria-hidden="true">●</span> Available
+                              </span>
+                            )}
+                          </h3>
+                          <p className="doctor-specialist">{d.specialist}</p>
+                          {d.clinicName && <p>🏥 {d.clinicName}</p>}
+                          {d.clinicLocation && <p>📍 {d.clinicLocation}</p>}
+                        </div>
+                        <div className="dm-card-actions">
+                          <button type="button" className="doctor-connect-btn" onClick={() => handleOpenMyDoctorChat(d)}>
+                            Chat with Doctor
+                          </button>
+                          <button type="button" className="doctor-appt-btn" onClick={() => setAppointmentDoctor(d)}>
+                            📅 Get Appointment
+                          </button>
+                        </div>
                       </div>
                     ))}
                 </div>
               ) : (
                 <div className="chatbox">
-                  <p style={{ margin: 0, color: "#1a1a2e", fontWeight: 600, fontSize: "15px" }}>
+                  <p style={{ margin: 0, color: "var(--color-text)", fontWeight: 600, fontSize: "15px" }}>
                     Which type of doctor do you need?
                   </p>
                   <select
@@ -1054,7 +1500,7 @@ function Chat() {
                   <button type="button" className="doctor-find-btn" onClick={handleFindNearbyDoctors} disabled={doctorLoading}>
                     {doctorLoading ? "Searching..." : "Find Doctors"}
                   </button>
-                  {doctorMessage && <p style={{ margin: 0, color: "#374151", fontSize: "14px" }}>{doctorMessage}</p>}
+                  {doctorMessage && <p style={{ margin: 0, color: "var(--color-text-secondary)", fontSize: "14px" }}>{doctorMessage}</p>}
                   {doctorSearched && !doctorLoading && doctors.length > 0 && (
                     doctors.map((d) => {
                       const alreadyConnected = myDoctors.some((md) => String(md._id) === String(d._id));
@@ -1087,6 +1533,29 @@ function Chat() {
           <MedicineDetailModal
             family={familyForProduct(productForChatSnapshot(detailMed))}
             onClose={() => setDetailMed(null)}
+          />
+        )}
+        {appointmentDoctor && (
+          <AppointmentModal
+            doctor={appointmentDoctor}
+            onClose={() => setAppointmentDoctor(null)}
+            onBooked={() => {
+              // The booking already created the chat message server-side —
+              // refresh the open conversation so the card appears at once.
+              if (connectedDoctor && String(connectedDoctor._id) === String(appointmentDoctor._id)) {
+                fetchConvoMessages(connectedDoctor._id);
+              }
+            }}
+          />
+        )}
+        {alternateFor && (
+          <AlternateTimeModal
+            appointmentId={alternateFor}
+            onClose={() => setAlternateFor(null)}
+            onSuggested={() => {
+              setAlternateFor(null);
+              if (selectedPatient) fetchPatientConvo(selectedPatient.patientId);
+            }}
           />
         )}
       </Layout>

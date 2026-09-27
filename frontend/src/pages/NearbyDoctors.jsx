@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import Layout from "../components/Layout";
+import "./ProviderPages.css";
 
 const API_BASE = "http://localhost:8001";
 
@@ -57,33 +58,37 @@ function NearbyDoctors() {
 
   return (
     <Layout>
-      <div style={{ padding: "40px 20px", maxWidth: "720px", margin: "0 auto" }}>
-        <h1>Nearby Doctors</h1>
-        <p style={{ color: "#6b7280", fontSize: "14px" }}>Find available doctors within 10 km of your current location.</p>
-
+      <div className="provider-page">
+        <header className="provider-page-heading">
+          <div>
+            <span className="provider-eyebrow">LOCAL CARE</span>
+            <h1>Nearby doctors</h1>
+            <p>Find available doctors within 10 km of your current location.</p>
+          </div>
         <button
+          className="provider-primary-button"
           onClick={handleFindNearby}
           disabled={loading}
-          style={{ maxWidth: "280px", background: loading ? "#9ca3af" : "#6a5af9" }}
         >
           {loading ? "Searching..." : "Find Nearby Doctors"}
         </button>
+        </header>
 
-        {message && <p style={{ marginTop: "16px", color: "#374151" }}>{message}</p>}
+        {message && <p className="provider-status" role="status">{message}</p>}
 
         {searched && !loading && doctors.length > 0 && (
-          <div style={{ marginTop: "20px", display: "grid", gap: "12px" }}>
+          <div className="provider-results">
             {doctors.map((d) => (
-              <div
-                key={d._id}
-                style={{ border: "1px solid #e5e7eb", borderRadius: "12px", padding: "16px", background: "#fff" }}
-              >
-                <h3 style={{ margin: "0 0 4px" }}>{d.name}</h3>
-                <p style={{ margin: 0, color: "#6a5af9", fontWeight: 600, fontSize: "14px" }}>{d.specialist}</p>
-                <p style={{ margin: "8px 0 0", fontSize: "14px" }}>🏥 {d.clinicName}</p>
-                <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#6b7280" }}>📍 {d.clinicLocation}</p>
-                {d.degree && <p style={{ margin: "4px 0 0", fontSize: "13px", color: "#6b7280" }}>{d.degree}</p>}
-              </div>
+              <article key={d._id} className="provider-result">
+                <div className="provider-result-mark" aria-hidden="true">+</div>
+                <div className="provider-result-details">
+                  <h2>{d.name}</h2>
+                  <p className="provider-specialty">{d.specialist}</p>
+                  <p className="provider-meta">{d.clinicName}</p>
+                  <p className="provider-meta">{d.clinicLocation}</p>
+                  {d.degree && <p className="provider-meta">{d.degree}</p>}
+                </div>
+              </article>
             ))}
           </div>
         )}

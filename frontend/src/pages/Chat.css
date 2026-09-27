@@ -107,6 +107,81 @@
   font-size: 13px;
 }
 
+/* Patient ↔ Doctor chat attachments: contained image preview + compact
+   PDF card. The card stays a white clinical tile inside any bubble so it
+   reads the same on own and incoming messages. */
+.msg-attach-img {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  margin-top: 6px;
+  background: rgba(0, 0, 0, 0.06);
+  cursor: zoom-in;
+}
+
+.msg-doc-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  color: #1a1a2e;
+  min-width: 0;
+}
+
+.msg-doc-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.msg-doc-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.msg-doc-name {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msg-doc-size {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.msg-doc-open {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6a5af9;
+  border: 1px solid #6a5af9;
+  border-radius: 8px;
+  padding: 6px 14px;
+  text-decoration: none;
+  background: #fff;
+}
+
+.msg-doc-open:hover {
+  background: #6a5af9;
+  color: #fff;
+}
+
+.chat-attach-preview {
+  margin-bottom: 8px;
+}
+
 .image-preview {
   display: flex;
   align-items: center;
@@ -551,5 +626,959 @@
   .chat-tab {
     font-size: 12px;
     padding: 10px 6px;
+  }
+
+  .msg-attach-img {
+    max-height: 200px;
+  }
+
+  .msg-doc-card {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .msg-doc-open {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .chat-input-row {
+    gap: 7px;
+  }
+
+  .attach-btn {
+    min-height: 44px;
+  }
+}
+
+/* ============================================================
+   AI Health Assistant tab (scoped .ai-* — doctor tabs untouched)
+   ============================================================ */
+
+.ai-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  padding: var(--space-3) var(--space-4);
+}
+
+.ai-header-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-primary-soft-bg);
+  border: 1px solid var(--color-primary-soft-border);
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.ai-header-text h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+
+.ai-header-text p {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.ai-chatbox {
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  height: 480px;
+  gap: var(--space-3);
+}
+
+/* User bubbles: compact, clearly distinguishable */
+.user-msg {
+  background: var(--color-primary);
+  border-radius: var(--radius-md) var(--radius-md) var(--space-1) var(--radius-md);
+  max-width: 75%;
+  font-size: var(--text-base);
+}
+
+/* AI bubbles: larger readable area, calm healthcare surface */
+.ai-msg {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md) var(--radius-md) var(--radius-md) var(--space-1);
+  max-width: 85%;
+  font-size: var(--text-base);
+}
+
+.ai-msg .sender-label {
+  color: var(--color-primary-hover);
+  font-weight: 700;
+  opacity: 1;
+}
+
+.ai-heading {
+  font-size: var(--text-base);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-1);
+}
+
+.ai-heading-icon {
+  margin-right: var(--space-2);
+}
+
+.ai-list li::marker {
+  color: var(--color-primary);
+}
+
+.ai-line {
+  color: var(--color-text-secondary);
+}
+
+/* Empty state */
+.ai-empty {
+  margin: auto;
+  text-align: center;
+  max-width: 420px;
+  padding: var(--space-6) var(--space-4);
+}
+
+.ai-empty-icon {
+  font-size: 44px;
+}
+
+.ai-empty-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+.ai-empty-sub {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-4);
+}
+
+.ai-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+}
+
+.ai-chip {
+  width: auto;
+  margin-top: 0;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-primary-soft-border);
+  background: var(--color-primary-soft-bg);
+  color: var(--color-primary-hover);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-chip:hover {
+  border-color: var(--color-primary);
+}
+
+/* Thinking indicator */
+.ai-thinking p {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  margin: 0;
+}
+
+.typing-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.typing-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  opacity: 0.35;
+  animation: ai-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes ai-dot-pulse {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dots span {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* Error + input + disclaimer (AI tab only) */
+.ai-error {
+  border-left: 4px solid var(--color-error);
+  font-weight: 500;
+}
+
+.ai-input-row .chat-input {
+  min-height: var(--tap-min);
+  border-color: var(--color-border-strong);
+  font-size: var(--text-base);
+}
+
+.ai-input-row .chat-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
+}
+
+.ai-input-row .send-btn {
+  background: var(--color-primary);
+  min-height: var(--tap-min);
+}
+
+.ai-input-row .send-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.ai-input-row .send-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ai-input-row .attach-btn:focus-visible,
+.ai-input-row .send-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.ai-disclaimer {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* Chat tabs refresh (visual only, same behavior) */
+.chat-tab {
+  border-color: var(--color-border-strong);
+  color: var(--color-text-muted);
+}
+
+.chat-tab-active {
+  background: var(--color-primary-soft-bg);
+  border-color: var(--color-primary-soft-border);
+  color: var(--color-primary-hover);
+}
+
+@media (max-width: 560px) {
+  .ai-chatbox {
+    height: 60vh;
+  }
+
+  .user-msg,
+  .ai-msg {
+    max-width: 92%;
+  }
+
+  .ai-header-text h2 {
+    font-size: var(--text-base);
+  }
+}
+
+/* ============================================================
+   Doctor ↔ patient chat (dm-*) + token refresh of shared
+   doctor classes (visual only — markup and behavior unchanged)
+   ============================================================ */
+
+.doctor-card {
+  border-color: var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.doctor-card h3 {
+  color: var(--color-text);
+}
+
+.doctor-card .doctor-specialist,
+.doctor-convo-header .doctor-specialist {
+  color: var(--color-primary-hover);
+}
+
+.doctor-connect-btn {
+  color: var(--color-primary-hover);
+  border-color: var(--color-primary);
+}
+
+.doctor-connect-btn:hover {
+  background: var(--color-primary);
+}
+
+.doctor-find-btn {
+  background: var(--color-primary);
+  min-height: var(--tap-min);
+}
+
+.doctor-find-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.doctor-back-btn:focus-visible,
+.doctor-connect-btn:focus-visible,
+.doctor-find-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.doctor-convo-header {
+  border-color: var(--color-border);
+  gap: var(--space-3);
+}
+
+.upload-error {
+  border-left: 4px solid var(--color-error);
+}
+
+/* List headers */
+.dm-list-header h3 {
+  margin: 0;
+  font-size: var(--text-base);
+}
+
+.dm-list-header p {
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+/* Person rows (patients / doctors) */
+.dm-person-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.dm-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--color-primary-soft-bg);
+  border: 1px solid var(--color-primary-soft-border);
+  color: var(--color-primary-hover);
+  font-weight: 700;
+  font-size: var(--text-base);
+  flex-shrink: 0;
+}
+
+.dm-person-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dm-person-info h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.dm-person-info p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dm-person-card .doctor-connect-btn {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+/* My Doctor card actions: Chat stays as-is, appointment is a filled button. */
+.dm-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dm-card-actions .doctor-connect-btn {
+  margin-top: 0;
+}
+
+.doctor-appt-btn {
+  background: #6a5af9;
+  color: #fff;
+  border: 1px solid #6a5af9;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  width: auto;
+  margin-top: 0;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.doctor-appt-btn:hover {
+  background: #5949e8;
+}
+
+.doctor-appt-btn:focus-visible {
+  outline: 2px solid #6a5af9;
+  outline-offset: 2px;
+}
+
+/* Appointment popup (STEP 1: UI only) — same overlay pattern as the
+   medicine/library modals, sized for doctor → date → slots → summary. */
+.appt-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.appt-modal {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  max-width: 440px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: var(--space-6);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.appt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.appt-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--color-text);
+}
+
+.appt-close {
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  width: 36px;
+  height: 36px;
+  margin-top: 0;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.appt-close:hover {
+  color: var(--color-text);
+}
+
+.appt-doctor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.appt-doctor-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.appt-doctor-info strong {
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.appt-doctor-specialist {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-primary-hover);
+}
+
+.appt-doctor-clinic {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.appt-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 var(--space-2);
+}
+
+.appt-date {
+  width: 100%;
+  margin-bottom: var(--space-4);
+  font-family: inherit;
+}
+
+.appt-slot-group {
+  margin: var(--space-3) 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.appt-slots {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.appt-slot {
+  min-height: var(--tap-min);
+  margin-top: 0;
+  padding: var(--space-2) var(--space-1);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  width: 100%;
+}
+
+.appt-slot:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary-hover);
+}
+
+.appt-slot-active,
+.appt-slot-active:hover {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.appt-selected {
+  margin-top: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-primary-soft-bg);
+  border: 1px solid var(--color-primary-soft-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.appt-selected strong {
+  color: var(--color-primary-hover);
+}
+
+.appt-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.appt-cancel-btn,
+.appt-confirm-btn,
+.appt-done-btn {
+  flex: 1;
+  min-height: var(--tap-min);
+  font-family: inherit;
+}
+
+.appt-confirm-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.appt-confirm-box {
+  text-align: center;
+}
+
+.appt-confirm-icon {
+  font-size: 40px;
+}
+
+.appt-confirm-title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--color-text);
+  margin: var(--space-2) 0 0;
+}
+
+.appt-confirm-sub {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin: var(--space-1) 0 var(--space-3);
+}
+
+.appt-summary {
+  text-align: left;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-2);
+}
+
+.appt-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  padding: 3px 0;
+}
+
+.appt-summary-row strong {
+  color: var(--color-text);
+  text-align: right;
+}
+
+/* In-chat appointment request card (STEP 3). White clinical tile like the
+   medicine card but with a warm accent edge so it reads distinct from
+   text, medicine, and file messages in any bubble. */
+.appt-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid var(--color-accent);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-top: 6px;
+  color: #1a1a2e;
+  min-width: 200px;
+  box-shadow: var(--shadow-sm);
+}
+
+.appt-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.appt-card-icon {
+  font-size: 20px;
+}
+
+.appt-card-header strong {
+  font-size: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.appt-status {
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 20px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.appt-status-pending {
+  color: var(--color-warning);
+  background: var(--color-warning-bg);
+  border-color: var(--color-warning-border);
+}
+
+.appt-status-accepted,
+.appt-status-completed {
+  color: var(--color-success);
+  background: var(--color-success-bg);
+  border-color: var(--color-success-border);
+}
+
+.appt-status-rejected,
+.appt-status-cancelled {
+  color: var(--color-error);
+  background: var(--color-error-bg);
+  border-color: var(--color-error-border);
+}
+
+.appt-status-alternate_requested {
+  color: var(--color-primary-hover);
+  background: var(--color-primary-soft-bg);
+  border-color: var(--color-primary-soft-border);
+}
+
+.appt-card-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  padding: 2px 0;
+  margin: 0;
+  color: #6b7280;
+}
+
+.appt-card-row strong {
+  color: #1a1a2e;
+  text-align: right;
+}
+
+.appt-alternate-box {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: var(--color-primary-soft-bg);
+  border: 1px solid var(--color-primary-soft-border);
+  border-radius: 8px;
+}
+
+.appt-alternate-note {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary-hover);
+}
+
+.appt-card-status-line {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: #6b7280;
+}
+
+.appt-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.appt-card-btn {
+  flex: 1;
+  min-height: 44px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.appt-card-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.appt-card-accept {
+  background: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.appt-card-accept:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.appt-card-alternate {
+  background: #fff;
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary-hover);
+}
+
+.appt-card-alternate:hover:not(:disabled) {
+  background: var(--color-primary-soft-bg);
+}
+
+.appt-card-reject {
+  background: #fff;
+  border: 1px solid var(--color-error-border);
+  color: var(--color-error);
+}
+
+.appt-card-reject:hover:not(:disabled) {
+  background: var(--color-error-bg);
+}
+
+/* Availability indicator (only rendered when provided by the app) */
+.dm-status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-success);
+}
+
+.dm-status-dot span {
+  font-size: 10px;
+}
+
+/* Empty + loading states */
+.dm-empty {
+  margin: auto;
+  text-align: center;
+  max-width: 360px;
+  padding: var(--space-6) var(--space-4);
+}
+
+.dm-empty-icon {
+  font-size: 40px;
+}
+
+.dm-empty-title {
+  font-size: var(--text-base);
+  font-weight: 700;
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+.dm-empty-sub {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  margin: 0 0 var(--space-4);
+}
+
+.dm-empty .doctor-find-btn {
+  align-self: center;
+}
+
+.dm-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  padding: var(--space-6) 0;
+}
+
+/* Doctor/patient inputs (scoped; autocomplete logic untouched) */
+.dm-input-row .chat-input {
+  min-height: var(--tap-min);
+  border-color: var(--color-border-strong);
+  font-size: var(--text-base);
+}
+
+.dm-input-row .chat-input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-focus-ring);
+  outline: none;
+}
+
+.dm-input-row .send-btn {
+  background: var(--color-primary);
+  min-height: var(--tap-min);
+}
+
+.dm-input-row .send-btn:hover {
+  background: var(--color-primary-hover);
+}
+
+.dm-input-row .send-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.dm-input-row .send-btn:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Medicine card: distinct clinical look + tap hint */
+.med-card {
+  border-color: var(--color-primary-soft-border);
+  border-left: 4px solid var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.med-card-title span {
+  color: var(--color-primary-hover);
+}
+
+.med-card-badge {
+  color: var(--color-primary-hover);
+  background: var(--color-primary-soft-bg);
+  border-color: var(--color-primary-soft-border);
+}
+
+.med-card-hint {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-primary-hover);
+}
+
+.med-card.med-clickable:hover {
+  border-color: var(--color-primary);
+}
+
+.med-card.med-clickable:focus-visible {
+  outline: 2px solid var(--color-primary);
+}
+
+@media (max-width: 560px) {
+  .dm-person-card {
+    flex-wrap: wrap;
+  }
+
+  .dm-person-card .doctor-connect-btn {
+    width: 100%;
+  }
+
+  .dm-card-actions {
+    width: 100%;
+  }
+
+  .dm-card-actions .doctor-connect-btn,
+  .dm-card-actions .doctor-appt-btn {
+    width: 100%;
+  }
+
+  .appt-modal {
+    padding: var(--space-4);
+  }
+
+  .appt-slots {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .appt-actions {
+    flex-direction: column;
   }
 }

@@ -1,27 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+
 /* ============================================================
-   Healthcare App — Global Design System (foundation only)
-   Calm healthcare blue/teal tokens + reusable opt-in styles.
-   Pages are NOT restyled by this file; future steps adopt these
-   tokens page by page. Do not add page-specific rules here.
-   ============================================================ */
+  Healthcare App — Care-first visual system
+  ============================================================ */
 
 :root {
+  color-scheme: light;
   /* ---- Brand / action ---- */
-  --color-primary: #0f766e;          /* calm healthcare teal */
-  --color-primary-hover: #115e59;
-  --color-primary-active: #134e4a;
-  --color-primary-soft-bg: #f0fdfa;
-  --color-primary-soft-border: #99f6e4;
+  --color-primary: #176b5b;
+  --color-primary-hover: #105649;
+  --color-primary-active: #0b433a;
+  --color-primary-soft-bg: #e8f4f0;
+  --color-primary-soft-border: #c1ded4;
   --color-on-primary: #ffffff;
+  --color-accent: #d98a54;
+  --color-accent-soft: #fbf1e8;
 
   /* ---- Surfaces & text ---- */
-  --color-background: #f9fafb;
+  --color-background: #f3f7f5;
   --color-surface: #ffffff;
-  --color-text: #1a1a2e;
-  --color-text-secondary: #374151;
-  --color-text-muted: #6b7280;
-  --color-border: #e5e7eb;
-  --color-border-strong: #d1d5db;
+  --color-surface-raised: #fbfdfc;
+  --color-text: #18332e;
+  --color-text-secondary: #526762;
+  --color-text-muted: #778984;
+  --color-border: #dce7e2;
+  --color-border-strong: #c4d4cd;
 
   /* ---- Status ---- */
   --color-success: #166534;
@@ -35,11 +38,11 @@
   --color-error-border: #fecaca;
 
   /* ---- Focus ---- */
-  --color-focus-ring: rgba(15, 118, 110, 0.25);
+  --color-focus-ring: rgba(23, 107, 91, 0.22);
 
   /* ---- Typography ---- */
-  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, sans-serif;
+  --font-family: "DM Sans", "Segoe UI", sans-serif;
+  --font-family-heading: "Manrope", "DM Sans", sans-serif;
   --text-xs: 12px;    /* meta labels only, never body copy */
   --text-sm: 13px;
   --text-base: 15px;
@@ -60,14 +63,49 @@
 
   /* ---- Shape & elevation ---- */
   --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 4px 12px rgba(16, 24, 40, 0.08);
+  --shadow-sm: 0 2px 8px rgba(24, 51, 46, 0.045);
+  --shadow-md: 0 12px 32px rgba(24, 51, 46, 0.09);
 
   /* ---- Touch ---- */
   --tap-min: 44px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-primary: #78c8b0;
+  --color-primary-hover: #91d6c1;
+  --color-primary-active: #a9e2d0;
+  --color-primary-soft-bg: #1b3b34;
+  --color-primary-soft-border: #315f53;
+  --color-on-primary: #102820;
+  --color-accent: #efb486;
+  --color-accent-soft: #392a21;
+
+  --color-background: #101a18;
+  --color-surface: #172320;
+  --color-surface-raised: #1c2b27;
+  --color-text: #e5efeb;
+  --color-text-secondary: #b5c5bf;
+  --color-text-muted: #91a39c;
+  --color-border: #30423c;
+  --color-border-strong: #425750;
+
+  --color-success: #a7ddb0;
+  --color-success-bg: #1d3828;
+  --color-success-border: #355f40;
+  --color-warning: #f0c47d;
+  --color-warning-bg: #382d1d;
+  --color-warning-border: #65502c;
+  --color-error: #f0a09b;
+  --color-error-bg: #3d2525;
+  --color-error-border: #71403e;
+
+  --color-focus-ring: rgba(120, 200, 176, 0.32);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.32);
 }
 
 /* ---- Base typography (foundation; page layouts/colors untouched) ---- */
@@ -78,11 +116,22 @@ body {
   font-size: var(--text-base);
   line-height: var(--leading-body);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
 h1, h2, h3, h4 {
+  font-family: var(--font-family-heading);
   line-height: var(--leading-heading);
   color: var(--color-text);
+}
+
+button, input, select, textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
 }
 
 /* Visible keyboard focus everywhere (a11y) */

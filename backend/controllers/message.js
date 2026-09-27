@@ -1,11 +1,19 @@
 const fs = require("fs");
+const path = require("path");
 const mongoose = require("mongoose");
 const Message = require("../models/message");
 const Doctor = require("../models/doctor");
 const User = require("../models/user");
 const Connection = require("../models/connection");
 const { getAIhealthResponse } = require("../utils/aiService");
-const { MAX_IMAGE_SIZE, ALLOWED_IMAGE_TYPES } = require("../middlewares/upload");
+const {
+  MAX_IMAGE_SIZE,
+  MAX_DOCUMENT_SIZE,
+  ALLOWED_IMAGE_TYPES,
+  ALLOWED_DOCUMENT_TYPES,
+  ALLOWED_IMAGE_EXTS,
+  ALLOWED_DOCUMENT_EXTS,
+} = require("../middlewares/upload");
 
 async function getRequesterRole(userEmail) {
   const user = await User.findOne({ email: userEmail }).select("role").lean();
@@ -65,27 +73,57 @@ async function handleSendMessage(req, res) {
   try {
     const { text, doctorId, type, medicine, medicines } = req.body;
     const senderEmail = req.user.email;
+    // Appointment cards are created automatically by the server when a
+    // booking succeeds (see controllers/appointment.js) — clients cannot
+    // forge them or smuggle appointment references through chat.
+    if (type === "appointment" || req.body.appointmentId !== undefined) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      return res.status(403).json({ error: "Appointment messages are created automatically when booking." });
+    }
     const wantsMedicineCard = type === "medicine" || medicine !== undefined || medicines !== undefined;
 
     let fileUrl = null;
     let fileName = null;
     let fileType = null;
+    let fileSize = null;
+    let mimeType = null;
 
     if (req.file) {
-      const isImage = ALLOWED_IMAGE_TYPES.includes(req.file.mimetype);
+      const ext = path.extname(req.file.originalname || "").toLowerCase();
+      const isImage =
+        ALLOWED_IMAGE_TYPES.includes(req.file.mimetype) &&
+        (ALLOWED_IMAGE_EXTS || []).includes(ext);
+      const isDocument =
+        ALLOWED_DOCUMENT_TYPES.includes(req.file.mimetype) &&
+        (ALLOWED_DOCUMENT_EXTS || []).includes(ext);
 
-      if (isImage && req.file.size > MAX_IMAGE_SIZE) {
+      if (!isImage && !isDocument) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: "Image size must be under 5MB" });
+        return res.status(400).json({ error: "This file type is not supported." });
+      }
+
+      const limit = isImage ? MAX_IMAGE_SIZE : MAX_DOCUMENT_SIZE;
+      if (req.file.size > limit) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "File is too large." });
       }
 
       fileUrl = `/uploads/${req.file.filename}`;
       fileName = req.file.originalname;
       fileType = isImage ? "image" : "document";
+      fileSize = req.file.size;
+      mimeType = req.file.mimetype;
     }
 
     if (!text && !fileUrl && !wantsMedicineCard) {
       return res.status(400).json({ error: "Message cannot be empty" });
+    }
+
+    // Medicine cards never carry file attachments — fail loudly instead of
+    // leaving an orphan file on disk or silently dropping the attachment.
+    if (wantsMedicineCard && req.file) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: "Attachments cannot be combined with medicine cards." });
     }
 
     if (doctorId) {
@@ -157,6 +195,8 @@ async function handleSendMessage(req, res) {
           fileUrl,
           fileName,
           fileType,
+          fileSize,
+          mimeType,
           doctorId,
         });
         return res.status(201).json({ userMessage });
@@ -164,7 +204,7 @@ async function handleSendMessage(req, res) {
       if (wantsMedicineCard) {
         return res.status(403).json({ error: "Only doctors can share medicine cards" });
       }
-      const userMessage = await Message.create({ senderEmail, text, fileUrl, fileName, fileType, doctorId });
+      const userMessage = await Message.create({ senderEmail, text, fileUrl, fileName, fileType, fileSize, mimeType, doctorId });
       await Connection.findOneAndUpdate(
         { patientId: req.user._id, doctorId: doctor._id },
         { $setOnInsert: { status: "active" } },
@@ -177,7 +217,7 @@ async function handleSendMessage(req, res) {
       return res.status(403).json({ error: "Only doctors can share medicine cards" });
     }
 
-    const userMessage = await Message.create({ senderEmail, text, fileUrl, fileName, fileType });
+    const userMessage = await Message.create({ senderEmail, text, fileUrl, fileName, fileType, fileSize, mimeType });
     let aiMessage = null;
     let aiError = null;
 

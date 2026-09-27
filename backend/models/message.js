@@ -10,7 +10,7 @@ const messageSchema = new mongoose.Schema(
     // (see controllers/message.js). Stores a whitelisted snapshot of the
     // flat product shape from frontend/src/data/medicines.js — info only,
     // never dosage instructions.
-    type: { type: String, enum: ["text", "medicine"], default: "text" },
+    type: { type: String, enum: ["text", "medicine", "appointment"], default: "text" },
     // Single snapshot kept for backward compatibility with older
     // single-medicine messages/clients (mirrors the last entry of
     // `medicines` for newer multi-medicine messages).
@@ -41,6 +41,24 @@ const messageSchema = new mongoose.Schema(
     fileUrl: { type: String },
     fileName: { type: String },
     fileType: { type: String },
+    // Optional attachment metadata. Older text-only messages simply omit
+    // these fields and keep rendering as before.
+    fileSize: { type: Number },
+    mimeType: { type: String },
+    // Appointment request card (see controllers/appointment.js). Created
+    // automatically by the server when a booking succeeds — never from
+    // client input. appointmentId is the source of truth; the date/time
+    // snapshot the immutable request, and appointmentStatus/alternate*
+    // are synced by the server whenever the appointment status changes.
+    appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: "appointment" },
+    appointmentDate: { type: String },
+    appointmentTime: { type: String },
+    appointmentStatus: {
+      type: String,
+      enum: ["pending", "accepted", "alternate_requested", "rejected", "cancelled", "completed"],
+    },
+    alternateDate: { type: String },
+    alternateTime: { type: String },
   },
   { timestamps: true }
 );

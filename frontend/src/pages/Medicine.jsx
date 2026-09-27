@@ -81,38 +81,81 @@ function Medicine() {
   }
 
   function renderCard(f) {
+    function openDetails() {
+      setSelected(f);
+    }
+    function openOnKey(e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openDetails();
+      }
+    }
     return (
-      <div key={f.key} className="medicine-card">
+      <div
+        key={f.key}
+        className="medicine-card medicine-clickable"
+        onClick={openDetails}
+        onKeyDown={openOnKey}
+        role="button"
+        tabIndex={0}
+        aria-label={`View details for ${f.brandName}`}
+      >
         <div className="medicine-card-top">
           <span className="medicine-icon" aria-hidden="true">💊</span>
           <div className="medicine-card-info">
             <h3>{f.brandName}</h3>
+            <p className="medicine-ingredient-line">{f.info.activeIngredient}</p>
+            <p className="medicine-strength-line">{f.strengths.join(" · ")}</p>
             <p>{f.companyName}</p>
-            <p>{f.strengths.join(" · ")}</p>
-            <p>{f.info.activeIngredient}</p>
           </div>
         </div>
-        <button type="button" className="medicine-readmore" onClick={() => setSelected(f)}>
-          Read More
+        <button
+          type="button"
+          className="medicine-readmore"
+          onClick={(e) => {
+            e.stopPropagation();
+            openDetails();
+          }}
+        >
+          View Details
         </button>
       </div>
     );
   }
 
+  function clearSearch() {
+    setSearch("");
+  }
+
   return (
     <Layout>
       <div className="medicine-page">
-        <h1 className="medicine-heading">Medicine Directory - Information</h1>
+        <span className="medicine-badge">💊 Information Directory</span>
+        <h1 className="medicine-heading">Medicine Information</h1>
+        <p className="medicine-sub">
+          Explore commonly used medicines organized by health category.
+        </p>
 
         <div className="medicine-search-wrap">
+          <span className="medicine-search-icon" aria-hidden="true">🔍</span>
           <input
             type="text"
             className="medicine-search"
-            placeholder="Search..."
+            placeholder="Search medicines..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search by ingredient, brand, company, category, or strength"
           />
+          {query !== "" && (
+            <button
+              type="button"
+              className="medicine-search-clear"
+              onClick={clearSearch}
+              aria-label="Clear search"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         <div className="medicine-categories" aria-label="Medicine categories">
@@ -137,7 +180,11 @@ function Medicine() {
 
         <div ref={sectionsRef} className="medicine-sections">
           {sections.length === 0 ? (
-            <p className="medicine-empty">No medicines found.</p>
+            <div className="medicine-empty">
+              <span className="medicine-empty-icon" aria-hidden="true">💊</span>
+              <p className="medicine-empty-title">No medicines found.</p>
+              <p className="medicine-empty-sub">Try another medicine name or category.</p>
+            </div>
           ) : (
             sections.map(({ category, groups }) => (
               <section key={category} aria-label={category}>

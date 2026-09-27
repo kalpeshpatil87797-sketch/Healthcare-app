@@ -156,7 +156,7 @@ function ImDoctor() {
                 </svg>
               </button>
             </div>
-            {locationMsg && <p style={{ fontSize: "13px", color: "#374151", marginTop: "8px" }}>{locationMsg}</p>}
+            {locationMsg && <p style={{ fontSize: "13px", color: "var(--color-text-secondary)", marginTop: "8px" }}>{locationMsg}</p>}
 
             <div style={{ marginTop: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
               <input
@@ -165,7 +165,7 @@ function ImDoctor() {
                 onChange={(e) => setIsAvailable(e.target.checked)}
                 style={{ width: "auto" }}
               />
-              <span style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>Available for appointments</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-secondary)" }}>Available for appointments</span>
             </div>
 
             <button type="submit">Submit</button>

@@ -6,7 +6,7 @@ function Landing() {
     <div className="auth-wrapper">
       <div className="auth-card text-center" style={{ maxWidth: "480px" }}>
         <h1>Healthcare App</h1>
-        <p className="subtitle">Manage your health records in one place</p>
+        <p className="subtitle">Find trusted care, practical guidance, and useful health information in one place.</p>
 
         <Link to="/signup">
           <button style={{ marginTop: "10px" }}>Get Started</button>

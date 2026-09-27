@@ -1,0 +1,72 @@
+:root[data-theme="dark"] .auth-wrapper {
+  background-image: repeating-linear-gradient(135deg, rgba(120, 200, 176, 0.035) 0 1px, transparent 1px 18px);
+}
+
+:root[data-theme="dark"] .care-safety {
+  border-color: #5b4937;
+  background: #30271f;
+}
+
+:root[data-theme="dark"] .care-safety-icon {
+  border-color: #9d7654;
+  color: #f0c49e;
+}
+
+:root[data-theme="dark"] .care-safety p {
+  color: #d8c3ae;
+}
+
+:root[data-theme="dark"] .care-safety strong {
+  color: #f2ddc6;
+}
+
+:root[data-theme="dark"] .care-icon-chat {
+  background: #1b3b34;
+  color: #91d6c1;
+}
+
+:root[data-theme="dark"] .care-icon-doctor {
+  background: #242f40;
+  color: #a9c3ed;
+}
+
+:root[data-theme="dark"] .care-icon-medicine {
+  background: #392a21;
+  color: #efb486;
+}
+
+:root[data-theme="dark"] .care-icon-profile {
+  background: #302b3b;
+  color: #c3b7e4;
+}
+
+:root[data-theme="dark"] .chat-empty,
+:root[data-theme="dark"] .file-chip,
+:root[data-theme="dark"] .ai-heading,
+:root[data-theme="dark"] .doctor-card p,
+:root[data-theme="dark"] .med-suggest-brand {
+  color: var(--color-text);
+}
+
+:root[data-theme="dark"] .image-preview {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+}
+
+:root[data-theme="dark"] .attach-menu,
+:root[data-theme="dark"] .med-suggest {
+  background: var(--color-surface);
+}
+
+:root[data-theme="dark"] .upload-error,
+:root[data-theme="dark"] .med-preview-remove {
+  border-color: var(--color-error-border);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    transition: none;
+  }
+}

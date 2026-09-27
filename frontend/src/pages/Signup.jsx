@@ -120,7 +120,7 @@ function Signup() {
                   </svg>
                 </button>
               </div>
-              {locationMsg && <p style={{ fontSize: "12px", color: "#374151", marginTop: "6px" }}>{locationMsg}</p>}
+              {locationMsg && <p style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "6px" }}>{locationMsg}</p>}
             </div>
           </div>
 

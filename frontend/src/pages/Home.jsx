@@ -29,178 +29,108 @@ function Home() {
 
   return (
     <Layout>
-      <div className="home-page">
-        {/* HERO */}
-        <section className="home-hero">
-          <span className="home-badge">🩺 Healthcare Assistance</span>
-          <h1>Healthcare Assistance, Wherever You Are</h1>
-          {name && <p className="home-greeting">Welcome back, {name}.</p>}
-          <p className="home-hero-sub">
-            Get basic health guidance, find nearby doctors, connect with healthcare
-            professionals, and access useful medicine information from one place.
-          </p>
-          <div className="home-hero-cta">
-            <Link to="/chat" className="home-btn-primary">Start Health Chat</Link>
-            {isDoctor ? (
-              <Link to="/chat" className="home-btn-secondary">My Patients</Link>
-            ) : (
-              <Link to="/nearby-doctors" className="home-btn-secondary">Find Nearby Doctors</Link>
-            )}
+      <div className="home-page care-dashboard">
+        <section className="care-welcome">
+          <div className="care-welcome-copy">
+            <span className="care-eyebrow">YOUR CARE HUB</span>
+            <h1>{name ? `Welcome back, ${name}` : "Your health, in one place"}</h1>
+            <p>Find trusted support, get general health information, and stay connected to care.</p>
+            <div className="home-hero-cta">
+              <Link to={isDoctor ? "/chat" : "/nearby-doctors"} className="ui-btn ui-btn-primary">
+                {isDoctor ? "Open patient chats" : "Find a nearby doctor"}
+              </Link>
+              <Link to="/chat" className="ui-btn ui-btn-secondary">Ask the health assistant</Link>
+            </div>
           </div>
+          <aside className="care-note">
+            <span className="care-note-mark" aria-hidden="true">+</span>
+            <p className="care-note-label">A helpful reminder</p>
+            <h2>Small steps count.</h2>
+            <p>Use reliable information as a starting point, and speak with a qualified professional about personal medical concerns.</p>
+          </aside>
         </section>
 
-        {/* QUICK ACCESS */}
-        <section className="home-section">
-          <h2>Quick Access</h2>
-          <p className="home-section-sub">Jump straight to the service you need.</p>
+        <section className="care-services" aria-labelledby="care-services-title">
+          <div className="care-section-heading">
+            <div>
+              <span className="care-eyebrow">GET STARTED</span>
+              <h2 id="care-services-title">What do you need today?</h2>
+            </div>
+            <span className="care-section-caption">Choose a service to continue</span>
+          </div>
           <div className="home-grid">
-            <div className="home-card">
-              <span className="home-card-icon" aria-hidden="true">🩺</span>
-              <h3>AI Health Assistant</h3>
-              <p>Ask about symptoms and get basic health information.</p>
-              <Link to="/chat" className="home-card-btn">Start Chat</Link>
-            </div>
-            <div className="home-card">
-              <span className="home-card-icon" aria-hidden="true">📍</span>
-              <h3>Find Nearby Doctors</h3>
-              <p>Find available doctors based on location.</p>
-              <Link to="/nearby-doctors" className="home-card-btn">Find Doctors</Link>
-            </div>
+            <article className="ui-card home-card care-service-card">
+              <span className="home-card-icon care-icon-chat" aria-hidden="true">✳</span>
+              <span className="care-service-label">GENERAL GUIDANCE</span>
+              <h3>Health assistant</h3>
+              <p>Share a concern and explore general health information.</p>
+              <Link to="/chat" className="care-service-link">Start a conversation <span aria-hidden="true">→</span></Link>
+            </article>
             {isDoctor ? (
-              <div className="home-card">
-                <span className="home-card-icon" aria-hidden="true">💬</span>
-                <h3>My Patients</h3>
-                <p>Chat with patients connected to you.</p>
-                <Link to="/chat" className="home-card-btn">Open Patient Chats</Link>
-              </div>
+              <article className="ui-card home-card care-service-card">
+                <span className="home-card-icon care-icon-doctor" aria-hidden="true">↗</span>
+                <span className="care-service-label">CARE CONNECTIONS</span>
+                <h3>Patient conversations</h3>
+                <p>Continue a conversation with your connected patients.</p>
+                <Link to="/chat" className="care-service-link">Open patient chats <span aria-hidden="true">→</span></Link>
+              </article>
             ) : (
-              <div className="home-card">
-                <span className="home-card-icon" aria-hidden="true">💬</span>
-                <h3>Doctor Chat</h3>
-                <p>Connect with a doctor and communicate through chat.</p>
-                <Link to="/chat" className="home-card-btn">Chat with Doctor</Link>
-              </div>
+              <article className="ui-card home-card care-service-card">
+                <span className="home-card-icon care-icon-doctor" aria-hidden="true">⌖</span>
+                <span className="care-service-label">IN YOUR AREA</span>
+                <h3>Find a doctor</h3>
+                <p>Explore nearby healthcare professionals by specialty.</p>
+                <Link to="/nearby-doctors" className="care-service-link">Browse doctors <span aria-hidden="true">→</span></Link>
+              </article>
             )}
-            <div className="home-card">
-              <span className="home-card-icon" aria-hidden="true">💊</span>
-              <h3>Medicines</h3>
-              <p>Browse common medicines and medicine information.</p>
-              <Link to="/medicine" className="home-card-btn">Explore Medicines</Link>
-            </div>
+            <article className="ui-card home-card care-service-card">
+              <span className="home-card-icon care-icon-medicine" aria-hidden="true">＋</span>
+              <span className="care-service-label">REFERENCE</span>
+              <h3>Medicine information</h3>
+              <p>Browse the medicine directory by health category.</p>
+              <Link to="/medicine" className="care-service-link">Explore medicines <span aria-hidden="true">→</span></Link>
+            </article>
+            <article className="ui-card home-card care-service-card">
+              <span className="home-card-icon care-icon-medicine" aria-hidden="true">📚</span>
+              <span className="care-service-label">REFERENCE</span>
+              <h3>Health Library</h3>
+              <p>Read trusted health topics, exercises, and wellness guidance.</p>
+              <Link to="/look" className="care-service-link">Explore the library <span aria-hidden="true">→</span></Link>
+            </article>
             {!isDoctor && (
-              <div className="home-card">
-                <span className="home-card-icon" aria-hidden="true">👩‍⚕️</span>
-                <h3>Doctor Registration</h3>
-                <p>Doctors can register their professional details.</p>
-                <Link to="/im-doctor" className="home-card-btn">I&apos;m a Doctor</Link>
-              </div>
+              <article className="ui-card home-card care-service-card">
+                <span className="home-card-icon care-icon-profile" aria-hidden="true">＋</span>
+                <span className="care-service-label">JOIN OUR NETWORK</span>
+                <h3>Register as a doctor</h3>
+                <p>Share your professional details to join the care network.</p>
+                <Link to="/im-doctor" className="care-service-link">Start registration <span aria-hidden="true">→</span></Link>
+              </article>
+            )}
+            {isDoctor && (
+              <article className="ui-card home-card care-service-card">
+                <span className="home-card-icon care-icon-profile" aria-hidden="true">◎</span>
+                <span className="care-service-label">YOUR ACCOUNT</span>
+                <h3>Professional profile</h3>
+                <p>Review your healthcare professional information.</p>
+                <Link to="/profile" className="care-service-link">View profile <span aria-hidden="true">→</span></Link>
+              </article>
             )}
           </div>
         </section>
 
-        {/* HOW IT WORKS */}
-        <section className="home-section">
-          <h2>How It Works</h2>
-          <p className="home-section-sub">Three simple steps to get guidance.</p>
-          <div className="home-steps">
-            <div className="home-step">
-              <span className="home-step-num">1</span>
-              <h3>Describe Your Symptoms</h3>
-              <p>Use the AI health assistant to describe your symptoms.</p>
-            </div>
-            <div className="home-step">
-              <span className="home-step-num">2</span>
-              <h3>Find the Right Healthcare Support</h3>
-              <p>Find a suitable doctor or healthcare specialist based on your needs.</p>
-            </div>
-            <div className="home-step">
-              <span className="home-step-num">3</span>
-              <h3>Connect &amp; Get Guidance</h3>
-              <p>Connect with a doctor through our chat system.</p>
-            </div>
-          </div>
+        <section className="care-safety" aria-label="Health information safety">
+          <span className="care-safety-icon" aria-hidden="true">i</span>
+          <p><strong>For your safety</strong> This platform provides general health information, not diagnosis or treatment. For urgent or emergency symptoms, seek immediate medical care.</p>
         </section>
 
-        {/* AI HEALTH ASSISTANT */}
-        <section className="home-section home-highlight">
-          <span className="home-card-icon" aria-hidden="true">🤖</span>
-          <h2>Your First Step Towards Better Health Guidance</h2>
-          <p className="home-section-sub">
-            Our AI-powered health information and guidance assistant helps you understand
-            your symptoms better — it does not provide a confirmed diagnosis.
-          </p>
-          <ul className="home-list">
-            <li>Describe your symptoms in simple words</li>
-            <li>Get possible health-condition information</li>
-            <li>Understand common causes</li>
-            <li>Receive basic home-care precautions</li>
-            <li>Get guidance on which doctor or specialist to consult</li>
-          </ul>
-          <Link to="/chat" className="home-btn-primary">Talk to AI Assistant</Link>
-        </section>
-
-        {/* DOCTOR CONNECTION */}
-        <section className="home-section">
-          <h2>Connect With the Right Doctor</h2>
-          <p className="home-section-sub">
-            Find available doctors nearby, choose a specialist, and connect with a
-            healthcare professional through our chat system. Our directory supports
-            specialist-based doctor discovery, from General Physicians to Cardiologists,
-            Neurologists, Dermatologists, and more.
-          </p>
-          {isDoctor ? (
-            <Link to="/chat" className="home-btn-primary">Open Patient Chats</Link>
-          ) : (
-            <Link to="/nearby-doctors" className="home-btn-primary">Find a Doctor</Link>
-          )}
-        </section>
-
-        {/* MEDICINE INFORMATION */}
-        <section className="home-section home-highlight">
-          <span className="home-card-icon" aria-hidden="true">💊</span>
-          <h2>Explore Medicine Information</h2>
-          <p className="home-section-sub">
-            Browse medicines organized by common health categories and view available
-            medicine and product information for educational purposes. This is an
-            information directory, not a pharmacy — medicines are not sold here.
-          </p>
-          <Link to="/medicine" className="home-btn-primary">View Medicines</Link>
-        </section>
-
-        {/* RURAL HEALTHCARE FOCUS */}
-        <section className="home-section">
-          <h2>Designed to Make Healthcare More Accessible</h2>
-          <p className="home-section-sub">
-            Built especially for users with limited access to healthcare services:
-          </p>
-          <ul className="home-list home-list-left">
-            <li>Basic healthcare guidance in one place</li>
-            <li>Easier access to doctors through nearby discovery</li>
-            <li>Simple digital communication with healthcare professionals</li>
-            <li>Useful medicine information in plain language</li>
-            <li>Lightweight pages designed with limited-connectivity situations in mind</li>
-          </ul>
-        </section>
-
-        {/* SAFETY NOTICE */}
-        <section className="home-disclaimer">
-          <p>
-            This platform provides general health information and communication tools.
-            AI-generated information is not a substitute for professional medical diagnosis
-            or treatment. For emergencies or serious symptoms, seek immediate medical attention.
-          </p>
-        </section>
-
-        {/* FOOTER */}
-        <footer className="home-footer">
-          <div className="home-footer-brand">Healthcare App</div>
-          <div className="home-footer-links">
-            <Link to="/chat">Health Chat</Link>
+        <footer className="home-footer care-footer">
+          <span className="home-footer-brand">Healthcare App</span>
+          <nav className="home-footer-links" aria-label="Footer navigation">
+            <Link to="/chat">Health chat</Link>
             <Link to="/medicine">Medicines</Link>
-            <Link to="/nearby-doctors">Nearby Doctors</Link>
+            <Link to="/nearby-doctors">Nearby doctors</Link>
             <Link to="/profile">Profile</Link>
-          </div>
-          <p className="home-footer-note">For educational purposes. Always consult a qualified healthcare professional.</p>
+          </nav>
         </footer>
       </div>
     </Layout>
