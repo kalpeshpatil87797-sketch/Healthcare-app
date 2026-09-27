@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt")
 
 const userSchema = new mongoose.Schema(
   {
@@ -8,11 +9,26 @@ const userSchema = new mongoose.Schema(
     age: { type: Number, required: true },
     phone: { type: String, required: true },
     address: { type: String, required: true },
+    role: { type: String, enum: ["patient", "doctor"], default: "patient" },
+    location: {
+      latitude: { type: Number, min: -90, max: 90 },
+      longitude: { type: Number, min: -180, max: 180 },
+    },
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
   },
   { timestamps: true }
 );
+
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) return next();
+  this.password = await bcrypt.hash(this.password, 10);
+  next();
+});
+
+userSchema.methods.comparePassword = function(candidatePassword) {
+  return bcrypt.compare(candidatePassword,this.password);
+};
 
 const User = mongoose.model("user", userSchema);
 

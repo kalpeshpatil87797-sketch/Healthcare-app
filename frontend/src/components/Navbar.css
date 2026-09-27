@@ -7,6 +7,12 @@
   color: #fff;
 }
 
+.navbar-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .navbar-brand {
   font-weight: 700;
   font-size: 18px;
@@ -31,19 +37,32 @@
   text-decoration: underline;
 }
 
-.logout-btn {
+.menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-top: 0;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
   background: #ffffff;
   color: #6a5af9;
-  border: none;
-  padding: 8px 18px;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 14px;
+  font-size: 18px;
   cursor: pointer;
-  width: auto;
-  margin-top: 0;
 }
 
-.logout-btn:hover {
+.menu-btn:hover {
   background: #f0f0ff;
+}
+
+@media (max-width: 768px) {
+  .navbar {
+    padding: 14px 20px;
+  }
+
+  .navbar-links {
+    display: none;
+  }
 }

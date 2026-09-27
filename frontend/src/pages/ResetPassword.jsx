@@ -8,6 +8,8 @@ function ResetPassword() {
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
@@ -43,10 +45,20 @@ function ResetPassword() {
 
         <form onSubmit={handleSubmit}>
           <label>New Password</label>
-          <input type="password" required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div className="password-field">
+            <input type={showPassword ? "text" : "password"} required placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <button type="button" className="password-toggle" onClick={() => setShowPassword(!showPassword)} aria-pressed={showPassword}>
+              {showPassword ? "Hide" : "Show"}
+            </button>
+          </div>
 
           <label>Confirm Password</label>
-          <input type="password" required placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          <div className="password-field">
+            <input type={showConfirmPassword ? "text" : "password"} required placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+            <button type="button" className="password-toggle" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-pressed={showConfirmPassword}>
+              {showConfirmPassword ? "Hide" : "Show"}
+            </button>
+          </div>
 
           <button type="submit">Reset Password</button>
         </form>

@@ -54,7 +54,7 @@ label {
   margin-top: 16px;
 }
 
-input {
+input, select {
   width: 100%;
   padding: 11px 14px;
   border: 1px solid #d1d5db;
@@ -62,10 +62,68 @@ input {
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
+  background: #fff;
+  font-family: inherit;
 }
 
-input:focus {
+input:focus, select:focus {
   border-color: #6a5af9;
+}
+
+.password-field {
+  position: relative;
+}
+
+.password-field input {
+  padding-right: 58px;
+}
+
+.password-toggle {
+  width: auto;
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  margin: 0;
+  padding: 10px 12px;
+  background: transparent;
+  color: #6a5af9;
+  font-size: 12px;
+}
+
+.password-toggle:hover {
+  background: transparent;
+  color: #5949e8;
+}
+
+.location-field {
+  position: relative;
+}
+
+.location-field input {
+  padding-right: 42px;
+}
+
+.location-pin-btn {
+  width: auto;
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  margin: 0;
+  padding: 9px 12px;
+  background: transparent;
+  color: #6a5af9;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.location-pin-btn:hover {
+  background: transparent;
+  color: #5949e8;
+}
+
+.location-pin-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 button {

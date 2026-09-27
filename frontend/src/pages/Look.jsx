@@ -1,13 +1,12 @@
-import Navbar from "../components/Navbar";
+import Layout from "../components/Layout";
 
 function Look() {
   return (
-    <div>
-      <Navbar />
+    <Layout>
       <div style={{ padding: "40px", textAlign: "center" }}>
-        <h2>Nothing here</h2>
+        <h2>Book section coming soon</h2>
       </div>
-    </div>
+    </Layout>
   );
 }
 

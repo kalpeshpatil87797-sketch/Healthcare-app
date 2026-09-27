@@ -5,10 +5,23 @@ const sendEmail = require("../utils/sendEmail");
 
 const JWT_SECRET = process.env.JWT_SECRET ?? "your-secret-key-change-this";
 
+function parseCoordinate(value, min, max) {
+  if (value === undefined || value === null || value === "") return undefined;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < min || num > max) return null;
+  return num;
+}
+
 async function handleUserSignup(req, res) {
-  const { name, email, password, age, phone, address } = req.body;
+  const { name, email, password, age, phone, address, latitude, longitude } = req.body;
   try {
-    const user = await User.create({ name, email, password, age, phone, address });
+    const lat = parseCoordinate(latitude, -90, 90);
+    const lng = parseCoordinate(longitude, -180, 180);
+    if (lat === null || lng === null) {
+      return res.status(400).json({ error: "Invalid location coordinates" });
+    }
+    const location = lat !== undefined && lng !== undefined ? { latitude: lat, longitude: lng } : undefined;
+    const user = await User.create({ name, email, password, age, phone, address, location });
     return res.status(201).json({ message: "User created successfully", userId: user._id });
   } catch (err) {
     return res.status(400).json({ error: err.message });
@@ -17,18 +30,18 @@ async function handleUserSignup(req, res) {
 
 async function handleUserLogin(req, res) {
   const { email, password } = req.body;
-  const user = await User.findOne({ email, password });
+  const user = await User.findOne({ email});
 
-  if (!user) {
+  if (!user || !(await user.comparePassword(password))) {
     return res.status(401).json({ error: "Invalid Username Or Password" });
   }
 
-  const token = jwt.sign({ _id: user._id, email: user.email }, JWT_SECRET, { expiresIn: "7d" });
+  const token = jwt.sign({ _id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
 
   return res.status(200).json({
     message: "Login successful",
     token,
-    user: { _id: user._id, name: user.name, email: user.email },
+    user: { _id: user._id, name: user.name, email: user.email, role: user.role },
   });
 }
 
@@ -89,4 +102,44 @@ module.exports = {
   handleUserLogin,
   handleForgotPassword,
   handleResetPassword,
+  handleGetProfile,
+  handleUpdateLocation,
 };
+
+async function handleGetProfile(req, res) {
+  try {
+    const user = await User.findOne({ email: req.user.email }).select("-password -resetPasswordToken -resetPasswordExpires").lean();
+    if (!user) return res.status(404).json({ error: "User not found" });
+    let speciality = null;
+    if (user.role === "doctor") {
+      const Doctor = require("../models/doctor");
+      const doctor = await Doctor.findOne({ registeredBy: req.user.email }).select("specialist").lean();
+      speciality = doctor?.specialist ?? null;
+    }
+    return res.status(200).json({ ...user, speciality });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to get profile" });
+  }
+}
+
+async function handleUpdateLocation(req, res) {
+  try {
+    const lat = parseCoordinate(req.body.latitude, -90, 90);
+    const lng = parseCoordinate(req.body.longitude, -180, 180);
+    if (lat === undefined || lng === undefined) {
+      return res.status(400).json({ error: "Latitude and longitude are required" });
+    }
+    if (lat === null || lng === null) {
+      return res.status(400).json({ error: "Invalid location coordinates" });
+    }
+    const user = await User.findOneAndUpdate(
+      { email: req.user.email },
+      { location: { latitude: lat, longitude: lng } },
+      { new: true }
+    ).select("-password -resetPasswordToken -resetPasswordExpires");
+    if (!user) return res.status(404).json({ error: "User not found" });
+    return res.status(200).json({ message: "Location saved successfully", location: user.location });
+  } catch (err) {
+    return res.status(500).json({ error: "Failed to save location" });
+  }
+}
