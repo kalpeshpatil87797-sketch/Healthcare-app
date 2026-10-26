@@ -9,7 +9,14 @@ const userSchema = new mongoose.Schema(
     age: { type: Number, required: true },
     phone: { type: String, required: true },
     address: { type: String, required: true },
-    role: { type: String, enum: ["patient", "doctor"], default: "patient" },
+    role: { type: String, enum: ["patient", "doctor", "super_admin"], default: "patient" },
+    accountStatus: {
+      type: String,
+      enum: ["active", "suspended"],
+      default: "active",
+      index: true,
+    },
+    tokenVersion: { type: Number, default: 0, min: 0 },
     location: {
       latitude: { type: Number, min: -90, max: 90 },
       longitude: { type: Number, min: -180, max: 180 },
@@ -19,6 +26,8 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+userSchema.index({ role: 1, accountStatus: 1 });
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();

@@ -19,7 +19,8 @@ function Login() {
     try {
       const res = await axios.post("http://localhost:8001/user/login", formData);
       localStorage.setItem("token", res.data.token);
-      navigate("/dashboard");
+      const role = res.data?.user?.role;
+      navigate(role === "super_admin" ? "/admin" : "/dashboard");
     } catch (err) {
       setError(err.response?.data?.error ?? "Invalid Username Or Password");
     }

@@ -3,7 +3,7 @@ const crypto = require("crypto");
 const User = require("../models/user");
 const sendEmail = require("../utils/sendEmail");
 
-const JWT_SECRET = process.env.JWT_SECRET ?? "your-secret-key-change-this";
+const JWT_SECRET = process.env.JWT_SECRET;
 
 function parseCoordinate(value, min, max) {
   if (value === undefined || value === null || value === "") return undefined;
@@ -24,7 +24,14 @@ async function handleUserSignup(req, res) {
     const user = await User.create({ name, email, password, age, phone, address, location });
     return res.status(201).json({ message: "User created successfully", userId: user._id });
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: "An account with this email already exists" });
+    }
+    if (err?.name === "ValidationError" || err?.name === "CastError") {
+      return res.status(400).json({ error: "Please provide valid registration details" });
+    }
+    console.error("User signup failed:", err.message);
+    return res.status(500).json({ error: "Failed to create account" });
   }
 }
 
@@ -36,7 +43,18 @@ async function handleUserLogin(req, res) {
     return res.status(401).json({ error: "Invalid Username Or Password" });
   }
 
-  const token = jwt.sign({ _id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+  if (user.accountStatus === "suspended") {
+    return res.status(403).json({
+      error: "This account has been suspended. Please contact a Super Admin.",
+      code: "ACCOUNT_SUSPENDED",
+    });
+  }
+
+  const token = jwt.sign(
+    { _id: user._id, tv: user.tokenVersion ?? 0 },
+    JWT_SECRET,
+    { expiresIn: "7d" }
+  );
 
   return res.status(200).json({
     message: "Login successful",
@@ -108,7 +126,9 @@ module.exports = {
 
 async function handleGetProfile(req, res) {
   try {
-    const user = await User.findOne({ email: req.user.email }).select("-password -resetPasswordToken -resetPasswordExpires").lean();
+    const user = await User.findOne({ email: req.user.email })
+      .select("_id name email role age phone address location accountStatus createdAt updatedAt")
+      .lean();
     if (!user) return res.status(404).json({ error: "User not found" });
     let speciality = null;
     if (user.role === "doctor") {

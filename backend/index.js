@@ -5,12 +5,17 @@ const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
 require("dotenv").config();
 
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET must be configured before starting the backend");
+}
+
 const { connectToMongoDB } = require("./connect");
 const { checkAuth } = require("./middlewares/auth");
 const userRoute = require("./routes/user");
 const messageRoute = require("./routes/message");
 const doctorRoute = require("./routes/doctor");
 const appointmentRoute = require("./routes/appointment");
+const adminRoute = require("./routes/admin");
 
 const app = express();
 const PORT = 8001;
@@ -43,5 +48,6 @@ app.use("/user", userRoute);
 app.use("/message", messageRoute);
 app.use("/doctor", doctorRoute);
 app.use("/appointment", appointmentRoute);
+app.use("/admin", adminRoute);
 
 app.listen(PORT, () => console.log(`Server Started at PORT:${PORT}`));

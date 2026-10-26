@@ -5,6 +5,7 @@ const Message = require("../models/message");
 const Doctor = require("../models/doctor");
 const User = require("../models/user");
 const Connection = require("../models/connection");
+const Appointment = require("../models/appointment");
 const { getAIhealthResponse } = require("../utils/aiService");
 const {
   MAX_IMAGE_SIZE,
@@ -18,6 +19,15 @@ const {
 async function getRequesterRole(userEmail) {
   const user = await User.findOne({ email: userEmail }).select("role").lean();
   return user?.role ?? "patient";
+}
+
+// Missing approvalStatus is legacy data and stays approved.
+function isDoctorApproved(doctor) {
+  return !["pending", "rejected"].includes(doctor?.approvalStatus);
+}
+
+function isValidObjectId(value) {
+  return typeof value === "string" && mongoose.Types.ObjectId.isValid(value);
 }
 
 // Whitelist for structured medicine cards. Only the display fields needed
@@ -67,6 +77,37 @@ function sanitizeMedicine(input) {
   if (medicine.strength.toLowerCase() === "not specified") medicine.strength = "";
   if (medicine.dosageForm.toLowerCase() === "not specified") medicine.dosageForm = "";
   return medicine;
+}
+
+async function withCurrentAppointmentStatus(messages) {
+  const appointmentIds = [
+    ...new Set(
+      messages
+        .map((message) => message.appointmentId)
+        .filter(Boolean)
+        .map(String)
+    ),
+  ];
+  if (appointmentIds.length === 0) return messages;
+
+  const appointments = await Appointment.find({ _id: { $in: appointmentIds } })
+    .select("_id status alternateDate alternateTime")
+    .lean();
+  const appointmentsById = new Map(
+    appointments.map((appointment) => [String(appointment._id), appointment])
+  );
+
+  return messages.map((message) => {
+    const appointment = appointmentsById.get(String(message.appointmentId));
+    if (!appointment) return message;
+
+    return {
+      ...(typeof message.toObject === "function" ? message.toObject() : message),
+      appointmentStatus: appointment.status,
+      alternateDate: appointment.alternateDate ?? null,
+      alternateTime: appointment.alternateTime ?? null,
+    };
+  });
 }
 
 async function handleSendMessage(req, res) {
@@ -127,27 +168,55 @@ async function handleSendMessage(req, res) {
     }
 
     if (doctorId) {
-      const doctor = await Doctor.findById(doctorId).select("_id").lean();
+      if (!isValidObjectId(doctorId)) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "Invalid doctor id" });
+      }
+      const doctor = await Doctor.findById(doctorId)
+        .select("_id registeredBy approvalStatus isAvailable")
+        .lean();
       if (!doctor) {
+        if (req.file) fs.unlinkSync(req.file.path);
         return res.status(404).json({ error: "Doctor not found" });
       }
       const role = await getRequesterRole(senderEmail);
+      if (role !== "patient" && role !== "doctor") {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res.status(403).json({ error: "Only patients and doctors can message doctors." });
+      }
       if (role === "doctor") {
         const { patientId } = req.body;
         if (!patientId) {
+          if (req.file) fs.unlinkSync(req.file.path);
           return res.status(400).json({ error: "patientId is required" });
+        }
+        if (!isValidObjectId(patientId)) {
+          if (req.file) fs.unlinkSync(req.file.path);
+          return res.status(400).json({ error: "Invalid patient id" });
         }
         const ownDoctor = await Doctor.findOne({ _id: doctorId, registeredBy: senderEmail }).select("_id").lean();
         if (!ownDoctor) {
+          if (req.file) fs.unlinkSync(req.file.path);
           return res.status(403).json({ error: "Not authorized for this doctor conversation" });
+        }
+        if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
+          if (req.file) fs.unlinkSync(req.file.path);
+          return res.status(403).json({ error: "Your doctor profile is not approved for messaging." });
         }
         const connection = await Connection.findOne({ patientId, doctorId: doctor._id }).lean();
         if (!connection) {
+          if (req.file) fs.unlinkSync(req.file.path);
           return res.status(403).json({ error: "Patient is not connected to this doctor" });
         }
-        const patient = await User.findById(patientId).select("email").lean();
+        const patient = await User.findById(patientId).select("email accountStatus").lean();
         if (!patient) {
+          if (req.file) fs.unlinkSync(req.file.path);
           return res.status(404).json({ error: "Patient not found" });
+        }
+        // A suspended patient must not receive new messages.
+        if (patient.accountStatus === "suspended") {
+          if (req.file) fs.unlinkSync(req.file.path);
+          return res.status(403).json({ error: "This patient account is suspended." });
         }
         if (wantsMedicineCard) {
           // Accept one snapshot (legacy `medicine`) or a list (newer
@@ -201,6 +270,21 @@ async function handleSendMessage(req, res) {
         });
         return res.status(201).json({ userMessage });
       }
+      // Only approved doctors can receive new messages.
+      if (!isDoctorApproved(doctor)) {
+        if (req.file) fs.unlinkSync(req.file.path);
+        return res.status(403).json({ error: "This doctor is not currently available." });
+      }
+      // A suspended doctor must not receive new messages.
+      if (doctor.registeredBy) {
+        const doctorUser = await User.findOne({ email: doctor.registeredBy })
+          .select("accountStatus")
+          .lean();
+        if (doctorUser?.accountStatus === "suspended") {
+          if (req.file) fs.unlinkSync(req.file.path);
+          return res.status(403).json({ error: "This doctor is currently unavailable." });
+        }
+      }
       if (wantsMedicineCard) {
         return res.status(403).json({ error: "Only doctors can share medicine cards" });
       }
@@ -245,15 +329,26 @@ async function handleSendMessage(req, res) {
 async function handleGetMessages(req, res) {
   try {
     if (req.query.doctorId) {
+      if (!isValidObjectId(req.query.doctorId)) {
+        return res.status(404).json({ error: "Doctor not found" });
+      }
       const role = await getRequesterRole(req.user.email);
       if (role === "doctor") {
         const { patientId } = req.query;
         if (!patientId) {
           return res.status(400).json({ error: "patientId is required" });
         }
-        const ownDoctor = await Doctor.findOne({ _id: req.query.doctorId, registeredBy: req.user.email }).select("_id").lean();
+        if (!isValidObjectId(patientId)) {
+          return res.status(400).json({ error: "Invalid patient id" });
+        }
+        const ownDoctor = await Doctor.findOne({ _id: req.query.doctorId, registeredBy: req.user.email })
+          .select("_id approvalStatus")
+          .lean();
         if (!ownDoctor) {
           return res.status(403).json({ error: "Not authorized for this doctor conversation" });
+        }
+        if (!isDoctorApproved(ownDoctor)) {
+          return res.status(403).json({ error: "Your doctor profile is not approved for messaging." });
         }
         const connection = await Connection.findOne({ patientId, doctorId: ownDoctor._id }).lean();
         if (!connection) {
@@ -264,13 +359,13 @@ async function handleGetMessages(req, res) {
           return res.status(404).json({ error: "Patient not found" });
         }
         const messages = await Message.find({
-          doctorId: req.query.doctorId,
+          doctorId: ownDoctor._id,
           $or: [{ senderEmail: patient.email }, { recipientEmail: patient.email }],
         }).sort({ createdAt: 1 });
-        return res.status(200).json(messages);
+        return res.status(200).json(await withCurrentAppointmentStatus(messages));
       }
-      if (!mongoose.Types.ObjectId.isValid(req.query.doctorId)) {
-        return res.status(404).json({ error: "Doctor not found" });
+      if (role !== "patient") {
+        return res.status(403).json({ error: "Only patients and doctors can access doctor messages." });
       }
       const patientConnection = await Connection.findOne({ patientId: req.user._id, doctorId: req.query.doctorId }).lean();
       if (!patientConnection) {
@@ -282,7 +377,7 @@ async function handleGetMessages(req, res) {
           { recipientEmail: req.user.email, doctorId: req.query.doctorId },
         ],
       }).sort({ createdAt: 1 });
-      return res.status(200).json(messages);
+      return res.status(200).json(await withCurrentAppointmentStatus(messages));
     }
     const messages = await Message.find({
       $or: [
@@ -290,7 +385,7 @@ async function handleGetMessages(req, res) {
         { recipientEmail: req.user.email, doctorId: { $exists: false } },
       ],
     }).sort({ createdAt: 1 });
-    return res.status(200).json(messages);
+    return res.status(200).json(await withCurrentAppointmentStatus(messages));
   } catch (err) {
     console.error("Get messages failed:", err.message);
     return res.status(500).json({ error: "Failed to get messages" });

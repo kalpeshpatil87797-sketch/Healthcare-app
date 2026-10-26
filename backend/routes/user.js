@@ -11,8 +11,6 @@ const { restrictToLoggedinUserOnly } = require("../middlewares/auth");
 
 const authLimiter = require("../middlewares/rateLimiter");
 
-const authLimiter = require("../middlewares/rateLimiter");
-
 const router = express.Router();
 
 router.post("/signup", handleUserSignup);

@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Doctor = require("../models/doctor");
 const User = require("../models/user");
 const Connection = require("../models/connection");
@@ -19,6 +20,13 @@ const SPECIALTIES = [
   "Urologist",
   "Endocrinologist",
 ];
+
+// Missing approvalStatus is legacy data and stays approved.
+const APPROVED_DOCTOR_FILTER = { approvalStatus: { $nin: ["pending", "rejected"] } };
+
+function isDoctorApproved(doctor) {
+  return !["pending", "rejected"].includes(doctor?.approvalStatus);
+}
 
 function resolveSpecialty(value) {
   if (value === undefined || value === null || String(value).trim() === "") return undefined;
@@ -60,17 +68,23 @@ async function handleDoctorRegistration(req, res) {
       clinicLocation,
       registeredBy: req.user.email,
       isAvailable: isAvailable ?? true,
+      approvalStatus: "pending",
       location,
     });
 
     await User.updateOne({ email: req.user.email }, { $set: { role: "doctor" } });
 
     return res.status(201).json({
-      message: "Doctor registration details submitted successfully",
+      message: "Doctor registration submitted. A Super Admin must approve it before your profile is visible.",
       doctorId: doctor._id,
+      approvalStatus: "pending",
     });
   } catch (err) {
-    return res.status(400).json({ error: err.message });
+    if (err?.name === "ValidationError" || err?.name === "CastError") {
+      return res.status(400).json({ error: "Please provide valid doctor registration details" });
+    }
+    console.error("Doctor registration failed:", err.message);
+    return res.status(500).json({ error: "Failed to submit doctor registration" });
   }
 }
 
@@ -92,7 +106,7 @@ async function handleNearbyDoctors(req, res) {
       return res.status(400).json({ error: "Invalid specialty" });
     }
 
-    const matchQuery = { isAvailable: true };
+    const matchQuery = { isAvailable: true, ...APPROVED_DOCTOR_FILTER };
     if (specialty !== undefined) {
       matchQuery.specialist = { $regex: `^${escapeRegExp(specialty)}$`, $options: "i" };
     }
@@ -150,13 +164,36 @@ async function getOwnDoctor(userEmail) {
 
 async function handleConnect(req, res) {
   try {
+    const user = await User.findOne({ email: req.user.email }).select("role").lean();
+    if (!user || user.role !== "patient") {
+      return res.status(403).json({ error: "Only patients can connect with doctors" });
+    }
+
     const { doctorId } = req.body;
     if (!doctorId) {
       return res.status(400).json({ error: "doctorId is required" });
     }
-    const doctor = await Doctor.findById(doctorId).select("_id").lean();
+    if (!mongoose.Types.ObjectId.isValid(doctorId)) {
+      return res.status(400).json({ error: "Invalid doctor id" });
+    }
+    const doctor = await Doctor.findById(doctorId)
+      .select("_id registeredBy approvalStatus isAvailable")
+      .lean();
     if (!doctor) {
       return res.status(404).json({ error: "Doctor not found" });
+    }
+    // Only approved doctors can receive new connections.
+    if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
+      return res.status(403).json({ error: "This doctor is not currently available." });
+    }
+    // A suspended doctor must not receive new connections.
+    if (doctor.registeredBy) {
+      const doctorUser = await User.findOne({ email: doctor.registeredBy })
+        .select("accountStatus")
+        .lean();
+      if (doctorUser?.accountStatus === "suspended") {
+        return res.status(403).json({ error: "This doctor is currently unavailable." });
+      }
     }
     const connection = await Connection.findOneAndUpdate(
       { patientId: req.user._id, doctorId: doctor._id },
@@ -200,6 +237,11 @@ async function handleMyPatients(req, res) {
 
 async function handleMyDoctors(req, res) {
   try {
+    const user = await User.findOne({ email: req.user.email }).select("role").lean();
+    if (!user || user.role !== "patient") {
+      return res.status(403).json({ error: "Only patients can access doctor connections" });
+    }
+
     const connections = await Connection.find({ patientId: req.user._id })
       .populate("doctorId", "name specialist clinicName clinicLocation degree isAvailable")
       .sort({ createdAt: -1 })

@@ -4,6 +4,10 @@ const Message = require("../models/message");
 const Doctor = require("../models/doctor");
 const User = require("../models/user");
 const Connection = require("../models/connection");
+const {
+  acquireAppointmentSlotLock,
+  releaseAppointmentSlotLock,
+} = require("../utils/appointmentSlotLock");
 
 // Fresh role lookup — the JWT role can go stale after doctor registration,
 // so the database is the authority (same pattern as controllers/message.js).
@@ -78,6 +82,26 @@ function normalizeTime(value) {
   return trimmed.length > 10 ? null : trimmed;
 }
 
+function appointmentSlotConflictQuery(doctorId, date, time, excludeId) {
+  return {
+    ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+    doctorId,
+    status: { $in: ["pending", "accepted"] },
+    $or: [
+      { appointmentDate: date, appointmentTime: time },
+      { status: "accepted", alternateDate: date, alternateTime: time },
+    ],
+  };
+}
+
+async function findAppointmentSlotConflict(doctorId, date, time, excludeId) {
+  return Appointment.findOne(
+    appointmentSlotConflictQuery(doctorId, date, time, excludeId)
+  )
+    .select("_id")
+    .lean();
+}
+
 function toPatientView(a) {
   const doctor = a.doctorId && typeof a.doctorId === "object" ? a.doctorId : {};
   return {
@@ -130,9 +154,29 @@ async function handleBookAppointment(req, res) {
       return res.status(404).json({ error: "Doctor not found" });
     }
 
-    const doctor = await Doctor.findById(doctorId).select("_id").lean();
+    const doctor = await Doctor.findById(doctorId)
+      .select("_id registeredBy approvalStatus isAvailable")
+      .lean();
     if (!doctor) {
       return res.status(404).json({ error: "Doctor not found" });
+    }
+
+    // Only approved doctors can receive new bookings.
+    if (
+      ["pending", "rejected"].includes(doctor.approvalStatus) ||
+      doctor.isAvailable === false
+    ) {
+      return res.status(403).json({ error: "This doctor is not currently available." });
+    }
+
+    // A suspended doctor must not receive new bookings.
+    if (doctor.registeredBy) {
+      const doctorUser = await User.findOne({ email: doctor.registeredBy })
+        .select("accountStatus")
+        .lean();
+      if (doctorUser?.accountStatus === "suspended") {
+        return res.status(403).json({ error: "This doctor is currently unavailable." });
+      }
     }
 
     // Booking is only allowed inside an existing patient ↔ doctor connection.
@@ -156,18 +200,20 @@ async function handleBookAppointment(req, res) {
       return res.status(400).json({ error: "Invalid appointment time" });
     }
 
-    // Slot conflict: pending/accepted occupy the slot, everything else does not.
-    const occupied = await Appointment.findOne({
-      doctorId: doctor._id,
-      appointmentDate: date,
-      appointmentTime: time,
-      status: { $in: ["pending", "accepted"] },
-    }).select("_id").lean();
-    if (occupied) {
-      return res.status(409).json({ error: "This time slot is no longer available." });
+    const slotLock = await acquireAppointmentSlotLock(doctor._id, date, time);
+    if (!slotLock) {
+      res.set("Retry-After", "2");
+      return res.status(503).json({
+        error: "This appointment slot is being updated. Please try again.",
+        code: "APPOINTMENT_SLOT_BUSY",
+      });
     }
-
     try {
+      const occupied = await findAppointmentSlotConflict(doctor._id, date, time);
+      if (occupied) {
+        return res.status(409).json({ error: "This time slot is no longer available." });
+      }
+
       const appointment = await Appointment.create({
         patientId: req.user._id,
         doctorId: doctor._id,
@@ -204,6 +250,8 @@ async function handleBookAppointment(req, res) {
         return res.status(409).json({ error: "This time slot is no longer available." });
       }
       throw err;
+    } finally {
+      await releaseAppointmentSlotLock(slotLock);
     }
   } catch (err) {
     console.error("Book appointment failed:", err.message);
@@ -279,22 +327,28 @@ async function handleRespondAppointment(req, res) {
       return res.status(409).json({ error: "Appointment has already been decided" });
     }
 
+    if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+      return res.status(400).json({ error: "Invalid request body" });
+    }
     const { action, alternateDate, alternateTime } = req.body;
+    let update = {};
+    let slotLock = null;
     if (action === "accept") {
-      // Defensive re-check: the slot must still be free for acceptance.
-      const clash = await Appointment.findOne({
-        _id: { $ne: appointment._id },
-        doctorId: appointment.doctorId,
-        appointmentDate: appointment.appointmentDate,
-        appointmentTime: appointment.appointmentTime,
-        status: "accepted",
-      }).select("_id").lean();
-      if (clash) {
-        return res.status(409).json({ error: "This time slot is no longer available." });
+      slotLock = await acquireAppointmentSlotLock(
+        doctor._id,
+        appointment.appointmentDate,
+        appointment.appointmentTime
+      );
+      if (!slotLock) {
+        res.set("Retry-After", "2");
+        return res.status(503).json({
+          error: "This appointment slot is being updated. Please try again.",
+          code: "APPOINTMENT_SLOT_BUSY",
+        });
       }
-      appointment.status = "accepted";
+      update.status = "accepted";
     } else if (action === "reject") {
-      appointment.status = "rejected";
+      update.status = "rejected";
     } else if (action === "alternate") {
       const date = normalizeDate(alternateDate);
       const time = normalizeTime(alternateTime);
@@ -304,18 +358,47 @@ async function handleRespondAppointment(req, res) {
       if (date < serverTodayStr()) {
         return res.status(400).json({ error: "Alternate date cannot be in the past" });
       }
-      appointment.status = "alternate_requested";
-      appointment.alternateDate = date;
-      appointment.alternateTime = time;
+      update = {
+        status: "alternate_requested",
+        alternateDate: date,
+        alternateTime: time,
+      };
     } else {
       return res.status(400).json({ error: "Invalid action. Use accept, reject or alternate" });
     }
 
-    await appointment.save();
-    await syncAppointmentMessage(appointment);
-    await appointment.populate("patientId", "name age");
-    return res.status(200).json({ appointment: toDoctorView(appointment.toObject()) });
+    try {
+      if (action === "accept") {
+        const clash = await findAppointmentSlotConflict(
+          doctor._id,
+          appointment.appointmentDate,
+          appointment.appointmentTime,
+          appointment._id
+        );
+        if (clash) {
+          return res.status(409).json({ error: "This time slot is no longer available." });
+        }
+      }
+
+      const updated = await Appointment.findOneAndUpdate(
+        { _id: appointment._id, doctorId: doctor._id, status: "pending" },
+        { $set: update },
+        { new: true, runValidators: true }
+      );
+      if (!updated) {
+        return res.status(409).json({ error: "Appointment has already been decided" });
+      }
+
+      await syncAppointmentMessage(updated);
+      await updated.populate("patientId", "name age");
+      return res.status(200).json({ appointment: toDoctorView(updated.toObject()) });
+    } finally {
+      await releaseAppointmentSlotLock(slotLock);
+    }
   } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({ error: "This time slot is no longer available." });
+    }
     console.error("Respond to appointment failed:", err.message);
     return res.status(500).json({ error: "Failed to respond to appointment" });
   }
@@ -339,11 +422,17 @@ async function handleCancelAppointment(req, res) {
     if (appointment.status !== "pending") {
       return res.status(409).json({ error: "Only pending appointments can be cancelled" });
     }
-    appointment.status = "cancelled";
-    await appointment.save();
-    await syncAppointmentMessage(appointment);
-    await appointment.populate("doctorId", "name specialist clinicName");
-    return res.status(200).json({ appointment: toPatientView(appointment.toObject()) });
+    const updated = await Appointment.findOneAndUpdate(
+      { _id: appointment._id, patientId: req.user._id, status: "pending" },
+      { $set: { status: "cancelled" } },
+      { new: true, runValidators: true }
+    );
+    if (!updated) {
+      return res.status(409).json({ error: "Only pending appointments can be cancelled" });
+    }
+    await syncAppointmentMessage(updated);
+    await updated.populate("doctorId", "name specialist clinicName");
+    return res.status(200).json({ appointment: toPatientView(updated.toObject()) });
   } catch (err) {
     console.error("Cancel appointment failed:", err.message);
     return res.status(500).json({ error: "Failed to cancel appointment" });
@@ -370,23 +459,63 @@ async function handleAcceptAlternate(req, res) {
     if (appointment.status !== "alternate_requested") {
       return res.status(409).json({ error: "No alternate time to accept" });
     }
+    const alternateDate = normalizeDate(appointment.alternateDate);
+    const alternateTime = normalizeTime(appointment.alternateTime);
+    if (!alternateDate || !alternateTime) {
+      return res.status(409).json({ error: "This appointment has no valid alternate time." });
+    }
     // The suggested slot must still be free before it becomes accepted.
-    const clash = await Appointment.findOne({
-      _id: { $ne: appointment._id },
-      doctorId: appointment.doctorId,
-      appointmentDate: appointment.alternateDate,
-      appointmentTime: appointment.alternateTime,
-      status: { $in: ["pending", "accepted"] },
-    }).select("_id").lean();
-    if (clash) {
+    const slotLock = await acquireAppointmentSlotLock(
+      appointment.doctorId,
+      alternateDate,
+      alternateTime
+    );
+    if (!slotLock) {
+      res.set("Retry-After", "2");
+      return res.status(503).json({
+        error: "This appointment slot is being updated. Please try again.",
+        code: "APPOINTMENT_SLOT_BUSY",
+      });
+    }
+    try {
+      const clash = await findAppointmentSlotConflict(
+        appointment.doctorId,
+        alternateDate,
+        alternateTime,
+        appointment._id
+      );
+      const originalClash = await findAppointmentSlotConflict(
+        appointment.doctorId,
+        appointment.appointmentDate,
+        appointment.appointmentTime,
+        appointment._id
+      );
+      if (clash || originalClash) {
+        return res.status(409).json({ error: "This time slot is no longer available." });
+      }
+
+      const updated = await Appointment.findOneAndUpdate(
+        {
+          _id: appointment._id,
+          patientId: req.user._id,
+          status: "alternate_requested",
+        },
+        { $set: { status: "accepted" } },
+        { new: true, runValidators: true }
+      );
+      if (!updated) {
+        return res.status(409).json({ error: "No alternate time to accept" });
+      }
+      await syncAppointmentMessage(updated);
+      await updated.populate("doctorId", "name specialist clinicName");
+      return res.status(200).json({ appointment: toPatientView(updated.toObject()) });
+    } finally {
+      await releaseAppointmentSlotLock(slotLock);
+    }
+  } catch (err) {
+    if (err?.code === 11000) {
       return res.status(409).json({ error: "This time slot is no longer available." });
     }
-    appointment.status = "accepted";
-    await appointment.save();
-    await syncAppointmentMessage(appointment);
-    await appointment.populate("doctorId", "name specialist clinicName");
-    return res.status(200).json({ appointment: toPatientView(appointment.toObject()) });
-  } catch (err) {
     console.error("Accept alternate time failed:", err.message);
     return res.status(500).json({ error: "Failed to accept alternate time" });
   }
@@ -399,4 +528,5 @@ module.exports = {
   handleRespondAppointment,
   handleCancelAppointment,
   handleAcceptAlternate,
+  syncAppointmentMessage,
 };

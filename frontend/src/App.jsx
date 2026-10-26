@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
@@ -12,6 +12,12 @@ import Profile from "./pages/Profile";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./admin/AdminRoute";
+import AdminLayout from "./admin/AdminLayout";
+import AdminOverview from "./admin/pages/AdminOverview";
+import AdminUsers from "./admin/pages/AdminUsers";
+import AdminDoctors from "./admin/pages/AdminDoctors";
+import AdminAppointments from "./admin/pages/AdminAppointments";
 
 function App() {
   return (
@@ -29,6 +35,15 @@ function App() {
         <Route path="/im-doctor" element={<ProtectedRoute><ImDoctor /></ProtectedRoute>} />
         <Route path="/nearby-doctors" element={<ProtectedRoute><NearbyDoctors /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/admin" element={<AdminRoute />}>
+          <Route element={<AdminLayout />}>
+            <Route index element={<AdminOverview />} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="doctors" element={<AdminDoctors />} />
+            <Route path="appointments" element={<AdminAppointments />} />
+            <Route path="*" element={<Navigate to="/admin" replace />} />
+          </Route>
+        </Route>
       </Routes>
     </BrowserRouter>
   );

@@ -84,10 +84,13 @@ function ImDoctor() {
         payload.latitude = Number(location.latitude);
         payload.longitude = Number(location.longitude);
       }
-      await axios.post("http://localhost:8001/doctor/register", payload, {
+      const response = await axios.post("http://localhost:8001/doctor/register", payload, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      setSuccess("Doctor details submitted successfully");
+      setSuccess(
+        response.data?.message ??
+          "Doctor details submitted. Your profile is pending Super Admin approval."
+      );
       setFormData({ name: "", clinicName: "", degree: "", specialistType: "", clinicLocation: "" });
       setCustomSpecialty("");
       setLocation({ latitude: "", longitude: "" });
