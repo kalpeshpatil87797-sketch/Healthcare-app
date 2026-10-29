@@ -8,7 +8,7 @@ const API_BASE = "http://localhost:8001";
 
 function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [role, setRole] = useState("patient");
+  const [role, setRole] = useState("unknown");
   const [userName, setUserName] = useState("");
 
   // Same role-detection pattern used across the app (/user/me).
@@ -19,17 +19,10 @@ function Layout({ children }) {
         const res = await axios.get(`${API_BASE}/user/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const status = res.data?.doctorApprovalStatus;
-        setRole(
-          ["patient", "doctor"].includes(res.data?.role) &&
-            status === "approved" &&
-            res.data?.doctorProfileActive !== false
-            ? "doctor"
-            : "patient"
-        );
+        setRole(res.data?.effectiveRole ?? res.data?.role ?? "unknown");
         if (res.data?.name) setUserName(res.data.name);
       } catch {
-        // Patient defaults keep navigation fully usable.
+        // Keep only role-neutral navigation until the current role is known.
       }
     }
     fetchMe();

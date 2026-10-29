@@ -524,7 +524,7 @@ function Chat() {
   const [myDoctorsLoading, setMyDoctorsLoading] = useState(false);
   const [myDoctorsMessage, setMyDoctorsMessage] = useState("");
   const [connectingId, setConnectingId] = useState("");
-  const [role, setRole] = useState("patient");
+  const [role, setRole] = useState("unknown");
   const [patients, setPatients] = useState([]);
   const [patientsLoading, setPatientsLoading] = useState(false);
   const [patientsMessage, setPatientsMessage] = useState("");
@@ -617,17 +617,11 @@ function Chat() {
       const res = await axios.get(`${API_BASE}/user/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const approvalStatus = res.data?.doctorApprovalStatus;
-      const userRole =
-        ["patient", "doctor"].includes(res.data?.role) &&
-          approvalStatus === "approved" &&
-          res.data?.doctorProfileActive !== false
-          ? "doctor"
-          : "patient";
+      const userRole = res.data?.effectiveRole ?? res.data?.role ?? "unknown";
       setRole(userRole);
       if (userRole === "doctor") {
         fetchMyPatients();
-      } else {
+      } else if (userRole === "patient") {
         fetchMyDoctors();
       }
     } catch (err) {
@@ -1104,14 +1098,14 @@ function Chat() {
               >
                 AI Chat
               </button>
-              <button
+              {(role === "doctor" || role === "patient") && <button
                 type="button"
                 className={`chat-tab ${activeTab === "doctor" ? "chat-tab-active" : "chat-tab-inactive"}`}
                 onClick={() => setActiveTab("doctor")}
               >
                 {role === "doctor" ? "My Patients" : "Doctor"}
-              </button>
-              {role !== "doctor" && (
+              </button>}
+              {role === "patient" && (
                 <button
                   type="button"
                   className={`chat-tab ${activeTab === "mydoctor" ? "chat-tab-active" : "chat-tab-inactive"}`}

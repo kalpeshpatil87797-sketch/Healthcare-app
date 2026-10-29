@@ -658,15 +658,15 @@
 }
 
 .admin-badge-role-admin {
-  border-color: #b2ddff;
-  background: #eff8ff;
-  color: #175cd3;
-}
-
-.admin-badge-role-root-owner {
   border-color: #fedf89;
   background: #fffaeb;
   color: #93370d;
+}
+
+.admin-badge-role-root-owner {
+  border-color: #d6bbfb;
+  background: #f4ebff;
+  color: #6941c6;
 }
 
 .admin-badge-role-super-admin {

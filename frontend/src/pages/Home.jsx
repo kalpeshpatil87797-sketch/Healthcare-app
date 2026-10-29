@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import axios from "axios";
 import Layout from "../components/Layout";
 import AppointmentDashboard from "../components/AppointmentDashboard";
@@ -9,8 +9,11 @@ const API_BASE = "http://localhost:8001";
 
 function Home() {
   const [name, setName] = useState("");
-  const [role, setRole] = useState("patient");
+  const [role, setRole] = useState("unknown");
+  const isPatient = role === "patient";
   const isDoctor = role === "doctor";
+  const isCareUser = isPatient || isDoctor;
+  const isPrivilegedAdmin = role === "root_owner" || role === "super_admin";
 
   useEffect(() => {
     async function fetchMe() {
@@ -20,20 +23,15 @@ function Home() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.data?.name) setName(res.data.name);
-        const status = res.data?.doctorApprovalStatus;
-        setRole(
-          ["patient", "doctor"].includes(res.data?.role) &&
-            status === "approved" &&
-            res.data?.doctorProfileActive !== false
-            ? "doctor"
-            : "patient"
-        );
+        setRole(res.data?.effectiveRole ?? res.data?.role ?? "unknown");
       } catch {
-        // Stay on patient defaults; page remains fully usable.
+        // Keep privileged and patient features hidden until the role is known.
       }
     }
     fetchMe();
   }, []);
+
+  if (isPrivilegedAdmin) return <Navigate to="/admin" replace />;
 
   return (
     <Layout>
@@ -42,13 +40,21 @@ function Home() {
           <div className="care-welcome-copy">
             <span className="care-eyebrow">YOUR CARE HUB</span>
             <h1>{name ? `Welcome back, ${name}` : "Your health, in one place"}</h1>
-            <p>Find trusted support, get general health information, and stay connected to care.</p>
-            <div className="home-hero-cta">
-              <Link to={isDoctor ? "/chat" : "/nearby-doctors"} className="ui-btn ui-btn-primary">
-                {isDoctor ? "Open patient chats" : "Find a nearby doctor"}
-              </Link>
-              <Link to="/chat" className="ui-btn ui-btn-secondary">Ask the health assistant</Link>
-            </div>
+            <p>
+              {isDoctor
+                ? "Manage your appointment availability and stay connected to patients."
+                : isPatient
+                  ? "Find trusted support, get general health information, and stay connected to care."
+                  : `Your ${role.replaceAll("_", " ")} account is active.`}
+            </p>
+            {isCareUser && (
+              <div className="home-hero-cta">
+                <Link to={isDoctor ? "/doctor/appointments" : "/nearby-doctors"} className="ui-btn ui-btn-primary">
+                  {isDoctor ? "Set Appointment" : "Find a doctor & book"}
+                </Link>
+                <Link to="/chat" className="ui-btn ui-btn-secondary">Ask the health assistant</Link>
+              </div>
+            )}
           </div>
           <aside className="care-note">
             <span className="care-note-mark" aria-hidden="true">+</span>
@@ -68,7 +74,13 @@ function Home() {
             </div>
             <span className="care-section-caption">Choose a service to continue</span>
           </div>
-          <div className="home-grid">
+          {!isCareUser ? (
+            <div className="appointment-empty">
+              <h2>Account workspace</h2>
+              <p>Your current role is <strong>{role.replaceAll("_", " ")}</strong>. Patient and doctor tools are not shown for this account.</p>
+              <Link to="/profile" className="care-service-link">View account profile <span aria-hidden="true">→</span></Link>
+            </div>
+          ) : <div className="home-grid">
             <article className="ui-card home-card care-service-card">
               <span className="home-card-icon care-icon-chat" aria-hidden="true">✳</span>
               <span className="care-service-label">GENERAL GUIDANCE</span>
@@ -82,15 +94,15 @@ function Home() {
                 <span className="care-service-label">CARE CONNECTIONS</span>
                 <h3>Patient conversations</h3>
                 <p>Continue a conversation with your connected patients.</p>
-                <Link to="/chat" className="care-service-link">Open patient chats <span aria-hidden="true">→</span></Link>
+                <Link to="/doctor/appointments" className="care-service-link">Manage appointments <span aria-hidden="true">→</span></Link>
               </article>
             ) : (
               <article className="ui-card home-card care-service-card">
                 <span className="home-card-icon care-icon-doctor" aria-hidden="true">⌖</span>
                 <span className="care-service-label">IN YOUR AREA</span>
-                <h3>Find a doctor</h3>
-                <p>Explore nearby healthcare professionals by specialty.</p>
-                <Link to="/nearby-doctors" className="care-service-link">Browse doctors <span aria-hidden="true">→</span></Link>
+                <h3>Find a doctor & book</h3>
+                <p>Search approved doctors, check available appointment slots, and manage your bookings.</p>
+                <Link to="/nearby-doctors" className="care-service-link">Find a doctor <span aria-hidden="true">→</span></Link>
               </article>
             )}
             <article className="ui-card home-card care-service-card">
@@ -125,7 +137,7 @@ function Home() {
                 <Link to="/profile" className="care-service-link">View profile <span aria-hidden="true">→</span></Link>
               </article>
             )}
-          </div>
+          </div>}
         </section>
 
         <section className="care-safety" aria-label="Health information safety">
@@ -136,9 +148,13 @@ function Home() {
         <footer className="home-footer care-footer">
           <span className="home-footer-brand">Healthcare App</span>
           <nav className="home-footer-links" aria-label="Footer navigation">
-            <Link to="/chat">Health chat</Link>
-            <Link to="/medicine">Medicines</Link>
-            <Link to="/nearby-doctors">Nearby doctors</Link>
+            {isCareUser && <Link to="/chat">Health chat</Link>}
+            {isCareUser && <Link to="/medicine">Medicines</Link>}
+            {isDoctor ? (
+              <Link to="/doctor/appointments">Set Appointment</Link>
+            ) : isPatient ? (
+              <Link to="/nearby-doctors">Find a doctor</Link>
+            ) : null}
             <Link to="/profile">Profile</Link>
           </nav>
         </footer>

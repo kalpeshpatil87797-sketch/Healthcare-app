@@ -6,7 +6,10 @@ import {
   clearSession,
   getCurrentUser,
 } from "./adminApi";
-import { ADMIN_ROLES } from "./adminConstants";
+import {
+  ROOT_OWNER_ROLE,
+  SUPER_ADMIN_ROLE,
+} from "./adminConstants";
 import {
   AdminGateError,
   AdminGateLoader,
@@ -43,7 +46,7 @@ export default function AdminRoute() {
       .then((user) => {
         if (signal.aborted) return;
 
-        if (ADMIN_ROLES.includes(user?.role)) {
+        if ([ROOT_OWNER_ROLE, SUPER_ADMIN_ROLE].includes(user?.role)) {
           setAdminUser({
             _id: user._id || "",
             name: user.name || "",

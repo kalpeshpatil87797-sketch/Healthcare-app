@@ -4,7 +4,7 @@ import "./Sidebar.css";
 const PATIENT_LINKS = [
   { to: "/dashboard", label: "Home", icon: "🏠" },
   { to: "/chat", label: "AI Chat", icon: "🩺" },
-  { to: "/nearby-doctors", label: "Nearby Doctors", icon: "📍" },
+  { to: "/nearby-doctors", label: "Find Doctor & Appointments", icon: "📅" },
   { to: "/im-doctor", label: "Register as a doctor", icon: "＋" },
   { to: "/medicine", label: "Medicines", icon: "💊" },
   { to: "/look", label: "Health Library", icon: "📚" },
@@ -13,14 +13,41 @@ const PATIENT_LINKS = [
 
 const DOCTOR_LINKS = [
   { to: "/dashboard", label: "Home", icon: "🏠" },
+  { to: "/doctor/appointments", label: "Set Appointment", icon: "📅" },
   { to: "/chat", label: "My Patients", icon: "💬" },
   { to: "/medicine", label: "Medicines", icon: "💊" },
   { to: "/profile", label: "Profile", icon: "👤" },
 ];
 
+const ACCOUNT_LINKS = [
+  { to: "/dashboard", label: "Home", icon: "🏠" },
+  { to: "/profile", label: "Profile", icon: "👤" },
+];
+
+const ROOT_OWNER_LINKS = [
+  { to: "/dashboard", label: "Home", icon: "🏠" },
+  { to: "/admin", label: "Root Owner Dashboard", icon: "⚙" },
+  { to: "/profile", label: "Profile", icon: "👤" },
+];
+
+const SUPER_ADMIN_LINKS = [
+  { to: "/dashboard", label: "Home", icon: "🏠" },
+  { to: "/admin", label: "Admin Dashboard", icon: "⚙" },
+  { to: "/profile", label: "Profile", icon: "👤" },
+];
+
 function Sidebar({ isOpen, onClose, role }) {
   const navigate = useNavigate();
-  const links = role === "doctor" ? DOCTOR_LINKS : PATIENT_LINKS;
+  const links =
+    role === "doctor"
+      ? DOCTOR_LINKS
+      : role === "patient"
+        ? PATIENT_LINKS
+        : role === "root_owner"
+          ? ROOT_OWNER_LINKS
+          : role === "super_admin"
+            ? SUPER_ADMIN_LINKS
+          : ACCOUNT_LINKS;
 
   function handleLogout() {
     localStorage.removeItem("token");
