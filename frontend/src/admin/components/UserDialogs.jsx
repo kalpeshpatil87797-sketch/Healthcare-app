@@ -15,28 +15,66 @@ import AdminDialog from "./AdminDialog";
 const fetchUserDetail = (params, options) => getAdminUser(params.id, options);
 
 const STATUS_CHANGE_REASON = {
-  self: "You cannot change your own account status. Ask another Super Admin to do it.",
-  last_active_super_admin:
-    "This is the last active Super Admin. Promote or reactivate another Super Admin before suspending this account.",
+  self: "You cannot change your own account status.",
+  admin_account: "Only the Root Owner can change an Admin account's status.",
+  privileged_account: "This privileged account is protected from dashboard status changes.",
 };
 
 const STATUS_ERROR_COPY = {
-  SELF_STATUS_CHANGE_FORBIDDEN:
-    "You cannot change your own account status. Ask another Super Admin to do it.",
-  LAST_ACTIVE_SUPER_ADMIN:
-    "This is the last active Super Admin and cannot be suspended.",
+  SELF_STATUS_CHANGE_FORBIDDEN: "You cannot change your own account status.",
+  ROOT_OWNER_PROTECTED: "The Root Owner account cannot be changed through the dashboard.",
+  PRIVILEGED_ACCOUNT_PROTECTED: "Admins cannot change another Admin account's status.",
   ACCOUNT_STATUS_CHANGED:
     "This account changed while you were updating it. Close the dialog, refresh the list, and try again.",
   ADMIN_ACTION_BUSY:
     "Another account update is already running. Wait a moment and try again.",
   ACCOUNT_SUSPENDED:
-    "Your admin account was suspended. Sign in with another Super Admin account.",
+    "Your admin account was suspended. Contact the Root Owner.",
   INVALID_ACCOUNT_STATUS: "That account status is not valid.",
 };
 
+const ROLE_CHANGE_REASON = {
+  self: "The Root Owner cannot change their own role.",
+  root_owner_only: "Only the Root Owner can manage admin roles.",
+  privileged_account: "This privileged role cannot be changed through the dashboard.",
+  suspended_account: "Reactivate this account before changing its role.",
+  saved_role_missing: "This Admin has no verified saved patient or doctor role. Repair it through the reviewed migration process.",
+};
+
+const ROLE_ERROR_COPY = {
+  SELF_ROLE_CHANGE_FORBIDDEN: "The Root Owner cannot change their own role.",
+  ROOT_OWNER_REQUIRED: "Only the Root Owner can manage admin roles.",
+  ROOT_OWNER_PROTECTED: "The Root Owner role cannot be changed through the dashboard.",
+  USER_ROLE_CHANGED:
+    "This account role changed while you were updating it. Refresh and try again.",
+  USER_ROLE_MISMATCH:
+    "The account must be restored to its saved normal role.",
+  ROLE_CHANGE_NOT_ALLOWED:
+    "Only normal accounts can be promoted to Admin, and Admins can only be restored to their saved role.",
+  LEGACY_ROLE_REQUIRES_MIGRATION:
+    "This legacy account must be migrated through the explicit bootstrap process.",
+  ADMIN_ROLE_MISSING:
+    "This Admin has no verified saved patient or doctor role. Repair it through the reviewed migration process.",
+  INVALID_USER_ROLE: "That account role is not valid.",
+  ADMIN_ACTION_BUSY:
+    "Another account update is running. Wait a moment and try again.",
+  ACCOUNT_SUSPENDED:
+    "Your admin account was suspended. Contact the Root Owner.",
+};
+
+function roleChangeErrorMessage(error) {
+  if (!error) return "";
+  return (
+    ROLE_ERROR_COPY[error.code] ||
+    error.message ||
+    "The account role could not be updated. Please try again."
+  );
+}
+
 export function RoleBadge({ role }) {
   const variant =
-    role === "patient" || role === "doctor" || role === "super_admin"
+    role === "patient" || role === "doctor" || role === "admin" ||
+    role === "root_owner" || role === "super_admin"
       ? role.replace(/_/g, "-")
       : "unknown";
 
@@ -105,8 +143,11 @@ function ActivityCount({ label, value }) {
 
 export function UserDetailDialog({
   userId,
+  canManageRoles = false,
   onClose,
   onChangeStatus,
+  onChangeRole,
+  onRemoveDoctor,
 }) {
   const { data, error, isLoading, retry } =
     useAdminRequest(fetchUserDetail, { id: userId });
@@ -116,6 +157,16 @@ export function UserDetailDialog({
   const reason = data?.statusChange?.reason
     ? STATUS_CHANGE_REASON[data.statusChange.reason]
     : null;
+  const roleChangeAllowed = Boolean(data) && data.roleChange?.allowed !== false;
+  const roleChangeReason = data?.roleChange?.reason
+    ? ROLE_CHANGE_REASON[data.roleChange.reason]
+    : null;
+  const nextRole = data?.roleChange?.targetRole;
+  const canRemoveDoctor = Boolean(
+    data?.doctorProfile &&
+    data.doctorProfile.approvalStatus === "approved" &&
+    data.doctorProfile.isActive !== false
+  );
 
   const footer = (
     <>
@@ -135,6 +186,32 @@ export function UserDetailDialog({
           title={!changeAllowed ? reason : undefined}
         >
           {nextStatus === "suspended" ? "Suspend account" : "Reactivate account"}
+        </button>
+      ) : null}
+      {canManageRoles && data && nextRole ? (
+        <button
+          type="button"
+          className={`admin-btn ${
+            nextRole === "admin"
+              ? "admin-btn-primary"
+              : "admin-btn-danger"
+          }`}
+          onClick={() => onChangeRole(data, nextRole)}
+          disabled={!roleChangeAllowed}
+          title={!roleChangeAllowed ? roleChangeReason : undefined}
+        >
+          {nextRole === "admin"
+            ? "Promote to Admin"
+            : `Demote to ${ROLE_LABELS[nextRole] ?? nextRole}`}
+        </button>
+      ) : null}
+      {canRemoveDoctor ? (
+        <button
+          type="button"
+          className="admin-btn admin-btn-danger"
+          onClick={() => onRemoveDoctor(data)}
+        >
+          Remove Doctor
         </button>
       ) : null}
     </>
@@ -178,6 +255,9 @@ export function UserDetailDialog({
           {!changeAllowed && reason ? (
             <p className="admin-dialog-note">{reason}</p>
           ) : null}
+          {canManageRoles && !roleChangeAllowed && roleChangeReason ? (
+            <p className="admin-dialog-note">{roleChangeReason}</p>
+          ) : null}
 
           <dl className="admin-detail-grid">
             <DetailField label="Account ID" mono>
@@ -210,6 +290,15 @@ export function UserDetailDialog({
                     ? "Unavailable"
                     : "Available"}
                 </DetailField>
+                <DetailField label="Doctor profile status">
+                  {data.doctorProfile.isActive === false
+                    ? "Removed"
+                    : data.doctorProfile.approvalStatus === "pending"
+                      ? "Pending approval"
+                      : data.doctorProfile.approvalStatus === "rejected"
+                        ? "Rejected"
+                        : "Active"}
+                </DetailField>
               </dl>
             </section>
           ) : null}
@@ -239,6 +328,67 @@ export function UserDetailDialog({
               or doctor profiles.
             </p>
           </section>
+        </div>
+      ) : null}
+    </AdminDialog>
+  );
+}
+
+export function ConfirmRemoveDoctorDialog({
+  user,
+  doctorProfile,
+  onClose,
+  onConfirm,
+  isSubmitting = false,
+  error = null,
+}) {
+  return (
+    <AdminDialog
+      title="Remove this doctor?"
+      description="The user will lose doctor privileges, but their account and patient access will remain active."
+      onClose={onClose}
+      closeDisabled={isSubmitting}
+      tone="danger"
+      footer={
+        <>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="admin-btn admin-btn-danger"
+            onClick={onConfirm}
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Removing…" : "Remove Doctor"}
+          </button>
+        </>
+      }
+    >
+      <div className="admin-confirm-target">
+        <span className="admin-detail-avatar" aria-hidden="true">
+          {getInitials(user?.name)}
+        </span>
+        <div className="admin-detail-identity">
+          <strong>{user?.name || "Unnamed account"}</strong>
+          <span className="admin-cell-email">{user?.email || "—"}</span>
+          <span>{doctorProfile?.clinicName || "Doctor profile"}</span>
+        </div>
+      </div>
+      <p className="admin-dialog-note" role="note">
+        The doctor profile will be marked inactive and unavailable. User identity,
+        patient access, appointments, messages, and connections will be preserved.
+        Existing appointments are not canceled; arrange their follow-up separately.
+        Doctor access can return only after a new application is submitted and approved.
+      </p>
+      {error ? (
+        <div className="admin-notice admin-notice-error" role="alert">
+          {error.message || "The doctor profile could not be removed. Please try again."}
         </div>
       ) : null}
     </AdminDialog>
@@ -317,6 +467,84 @@ export function ConfirmStatusDialog({
       {error ? (
         <div className="admin-notice admin-notice-error" role="alert">
           {statusChangeErrorMessage(error)}
+        </div>
+      ) : null}
+    </AdminDialog>
+  );
+}
+
+export function ConfirmRoleChangeDialog({
+  user,
+  nextRole,
+  onClose,
+  onConfirm,
+  isSubmitting = false,
+  error = null,
+}) {
+  const promoting = nextRole === "admin";
+
+  return (
+    <AdminDialog
+      title={promoting ? "Promote this account to Admin?" : "Revoke Admin access?"}
+      description={
+        promoting
+          ? "This grants operational access to user, doctor, and appointment management."
+          : "This removes Admin access and restores the account's saved patient or doctor role."
+      }
+      onClose={onClose}
+      closeDisabled={isSubmitting}
+      tone={promoting ? "default" : "danger"}
+      footer={
+        <>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className={`admin-btn ${
+              promoting ? "admin-btn-primary" : "admin-btn-danger"
+            }`}
+            onClick={onConfirm}
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? "Saving…"
+              : promoting
+                ? "Promote to Admin"
+                  : `Revoke Admin access and restore ${ROLE_LABELS[nextRole] ?? nextRole}`}
+          </button>
+        </>
+      }
+    >
+      <div className="admin-confirm-target">
+        <span className="admin-detail-avatar" aria-hidden="true">
+          {getInitials(user?.name)}
+        </span>
+        <div className="admin-detail-identity">
+          <strong>{user?.name || "Unnamed account"}</strong>
+          <span className="admin-cell-email">{user?.email || "—"}</span>
+          <div className="admin-detail-badges">
+            <RoleBadge role={user?.role} />
+            <span aria-hidden="true">→</span>
+            <RoleBadge role={nextRole} />
+          </div>
+        </div>
+      </div>
+
+      <p className="admin-dialog-note" role="note">
+        {promoting
+          ? "Only promote a trusted, verified account. The role change is audited, active sessions are revoked, and existing healthcare records are preserved."
+          : "This removes Admin access, revokes active sessions, and restores the saved role. No account or healthcare records are deleted."}
+      </p>
+
+      {error ? (
+        <div className="admin-notice admin-notice-error" role="alert">
+          {roleChangeErrorMessage(error)}
         </div>
       ) : null}
     </AdminDialog>

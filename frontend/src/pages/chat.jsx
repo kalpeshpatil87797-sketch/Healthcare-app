@@ -617,7 +617,13 @@ function Chat() {
       const res = await axios.get(`${API_BASE}/user/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const userRole = res.data.role === "doctor" ? "doctor" : "patient";
+      const approvalStatus = res.data?.doctorApprovalStatus;
+      const userRole =
+        ["patient", "doctor"].includes(res.data?.role) &&
+          approvalStatus === "approved" &&
+          res.data?.doctorProfileActive !== false
+          ? "doctor"
+          : "patient";
       setRole(userRole);
       if (userRole === "doctor") {
         fetchMyPatients();
@@ -1551,6 +1557,7 @@ function Chat() {
         {alternateFor && (
           <AlternateTimeModal
             appointmentId={alternateFor}
+            doctorId={myDoctorId}
             onClose={() => setAlternateFor(null)}
             onSuggested={() => {
               setAlternateFor(null);

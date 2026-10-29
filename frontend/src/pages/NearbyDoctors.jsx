@@ -1,6 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
 import Layout from "../components/Layout";
+import AppointmentModal from "../components/AppointmentModal";
 import "./ProviderPages.css";
 
 const API_BASE = "http://localhost:8001";
@@ -10,6 +11,26 @@ function NearbyDoctors() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("Click the button to find doctors near you.");
   const [searched, setSearched] = useState(false);
+  const [bookingDoctor, setBookingDoctor] = useState(null);
+  const [connectingId, setConnectingId] = useState("");
+
+  async function connectAndBook(doctor) {
+    setConnectingId(String(doctor._id));
+    setMessage("");
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post(
+        `${API_BASE}/doctor/connect`,
+        { doctorId: doctor._id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setBookingDoctor(doctor);
+    } catch (err) {
+      setMessage(err.response?.data?.error ?? "Could not connect with this doctor.");
+    } finally {
+      setConnectingId("");
+    }
+  }
 
   function handleFindNearby() {
     setMessage("");
@@ -87,12 +108,26 @@ function NearbyDoctors() {
                   <p className="provider-meta">{d.clinicName}</p>
                   <p className="provider-meta">{d.clinicLocation}</p>
                   {d.degree && <p className="provider-meta">{d.degree}</p>}
+                  <button
+                    type="button"
+                    className="provider-primary-button"
+                    onClick={() => connectAndBook(d)}
+                    disabled={connectingId === String(d._id)}
+                  >
+                    {connectingId === String(d._id) ? "Connecting…" : "Connect and book"}
+                  </button>
                 </div>
               </article>
             ))}
           </div>
         )}
       </div>
+      {bookingDoctor ? (
+        <AppointmentModal
+          doctor={bookingDoctor}
+          onClose={() => setBookingDoctor(null)}
+        />
+      ) : null}
     </Layout>
   );
 }

@@ -10,7 +10,7 @@ const ERROR_COPY = {
   forbidden: {
     title: "Access denied",
     description:
-      "This area is restricted to Super Administrators. Sign in with an authorized account to continue.",
+      "This area is restricted to Admin and Root Owner accounts. Sign in with an authorized account to continue.",
     action: "Sign in with another account",
   },
   invalid: {
@@ -35,7 +35,7 @@ const ERROR_COPY = {
   },
   suspended: {
     title: "This account is suspended",
-    description: "Contact another Super Admin to restore access.",
+    description: "Contact the Root Owner to restore access.",
     action: "Sign in again",
   },
   server: {

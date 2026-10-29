@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import Layout from "../components/Layout";
 import { reverseGeocode } from "../utils/location";
@@ -6,6 +7,7 @@ import { SPECIALTIES } from "../utils/specialties";
 import "./auth.css";
 
 function ImDoctor() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     name: "",
     clinicName: "",
@@ -89,12 +91,13 @@ function ImDoctor() {
       });
       setSuccess(
         response.data?.message ??
-          "Doctor details submitted. Your profile is pending Super Admin approval."
+          "Doctor details submitted. Your profile is pending Admin approval."
       );
       setFormData({ name: "", clinicName: "", degree: "", specialistType: "", clinicLocation: "" });
       setCustomSpecialty("");
       setLocation({ latitude: "", longitude: "" });
       setLocationMsg("");
+      navigate("/doctor/verification", { replace: true });
     } catch (err) {
       setError(err.response?.data?.error ?? "Failed to submit doctor details");
     }
@@ -171,7 +174,7 @@ function ImDoctor() {
               <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-secondary)" }}>Available for appointments</span>
             </div>
 
-            <button type="submit">Submit</button>
+            <button type="submit">Submit application</button>
           </form>
         </div>
       </div>

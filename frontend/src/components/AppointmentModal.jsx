@@ -1,14 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import "../pages/Chat.css";
 
 const API_BASE = "http://localhost:8001";
-
-// STEP 2 — Confirm calls POST /appointment/book and creates a pending
-// appointment. No chat messages are sent here (that is STEP 3).
-// Example slots shown after a date is picked; real availability comes later.
-export const MORNING_SLOTS = ["09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM"];
-export const AFTERNOON_SLOTS = ["02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM", "04:00 PM", "04:30 PM"];
 
 // Today's date in local YYYY-MM-DD for the date input minimum (no past dates).
 function todayLocalISO() {
@@ -29,8 +23,8 @@ function formatPickedDate(iso) {
   });
 }
 
-// "Book an Appointment" popup for a connected doctor. Confirm sends the
-// booking request to the backend; success only reveals a frontend summary.
+// "Book an Appointment" popup for a connected doctor. The backend confirms
+// the booking and returns its persisted appointment details.
 // onBooked (optional) lets the opener refresh right away so the new
 // appointment card appears without a manual reload.
 export default function AppointmentModal({ doctor, onClose, onBooked }) {
@@ -39,11 +33,47 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
   const [confirmed, setConfirmed] = useState(false);
   const [sending, setSending] = useState(false);
   const [bookError, setBookError] = useState("");
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [availabilityReload, setAvailabilityReload] = useState(0);
+  const [availabilityMessage, setAvailabilityMessage] = useState("");
+  const [visitReason, setVisitReason] = useState("");
+  const [booking, setBooking] = useState(null);
+  const [bookingWarning, setBookingWarning] = useState("");
+
+  useEffect(() => {
+    if (!date || !doctor?._id) return undefined;
+
+    const controller = new AbortController();
+    const token = localStorage.getItem("token");
+    axios.get(`${API_BASE}/doctor/${doctor._id}/availability`, {
+      params: { date },
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((response) => {
+      const availableSlots = response.data?.availableSlots ?? [];
+      setSlots(availableSlots);
+      setAvailabilityMessage(
+        availableSlots.length ? "" : "No bookable slots are available on this date."
+      );
+    }).catch((err) => {
+      if (controller.signal.aborted) return;
+      setSlots([]);
+      setAvailabilityMessage(
+        err.response?.data?.error ?? "Could not load current appointment availability."
+      );
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoadingSlots(false);
+    });
+
+    return () => controller.abort();
+  }, [date, doctor?._id, availabilityReload]);
 
   if (!doctor) return null;
 
   const minDate = todayLocalISO();
-  const canConfirm = date !== "" && slot !== null && !sending;
+  const canConfirm =
+    date !== "" && slot !== null && visitReason.trim() !== "" && !sending;
 
   async function handleConfirm() {
     if (!canConfirm) return;
@@ -51,18 +81,27 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
     setBookError("");
     try {
       const token = localStorage.getItem("token");
-      await axios.post(
+      const response = await axios.post(
         `${API_BASE}/appointment/book`,
-        { doctorId: doctor._id, appointmentDate: date, appointmentTime: slot },
+        {
+          doctorId: doctor._id,
+          appointmentDate: date,
+          appointmentTime: slot,
+          visitReason: visitReason.trim(),
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
+      setBooking(response.data?.appointment ?? null);
+      setBookingWarning(response.data?.notificationWarning ?? "");
       setConfirmed(true);
-      onBooked?.();
+      onBooked?.(response.data?.appointment);
     } catch (err) {
       const message = err.response?.data?.error ?? "Failed to book appointment. Please try again.";
       if (err.response?.status === 409) {
         // Occupied slot: stay on the form so another time can be picked.
         setSlot(null);
+        setLoadingSlots(true);
+        setAvailabilityReload((current) => current + 1);
         setBookError(`${message} Please select another time.`);
       } else {
         setBookError(message);
@@ -102,8 +141,10 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
         {confirmed ? (
           <div className="appt-confirm-box">
             <span className="appt-confirm-icon" aria-hidden="true">✅</span>
-            <p className="appt-confirm-title">Appointment request sent</p>
-            <p className="appt-confirm-sub">Waiting for doctor confirmation.</p>
+            <p className="appt-confirm-title">Appointment confirmed</p>
+            <p className="appt-confirm-sub">
+              Confirmation ID: {booking?._id || "Unavailable"}
+            </p>
             <div className="appt-summary">
               <div className="appt-summary-row">
                 <span>Doctor:</span>
@@ -117,7 +158,12 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
                 <span>Time:</span>
                 <strong>{slot}</strong>
               </div>
+              <div className="appt-summary-row">
+                <span>Visit reason:</span>
+                <strong>{visitReason}</strong>
+              </div>
             </div>
+            {bookingWarning ? <p role="status">{bookingWarning}</p> : null}
             <div className="appt-actions">
               <button type="button" className="send-btn appt-done-btn" onClick={onClose}>
                 Done
@@ -138,16 +184,31 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
               onChange={(e) => {
                 setDate(e.target.value);
                 setSlot(null);
+                setSlots([]);
+                setLoadingSlots(Boolean(e.target.value));
+                setAvailabilityMessage("");
                 setBookError("");
               }}
+            />
+
+            <label className="appt-label" htmlFor="appt-reason">
+              Reason for visit
+            </label>
+            <textarea
+              id="appt-reason"
+              className="chat-input"
+              value={visitReason}
+              maxLength={500}
+              rows={3}
+              onChange={(event) => setVisitReason(event.target.value)}
+              placeholder="Briefly describe what you would like help with"
             />
 
             {date !== "" && (
               <>
                 <p className="appt-label">Available time slots</p>
-                <p className="appt-slot-group">Morning</p>
                 <div className="appt-slots">
-                  {MORNING_SLOTS.map((s) => (
+                  {slots.map((s) => (
                     <button
                       key={s}
                       type="button"
@@ -159,20 +220,12 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
                     </button>
                   ))}
                 </div>
-                <p className="appt-slot-group">Afternoon</p>
-                <div className="appt-slots">
-                  {AFTERNOON_SLOTS.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`appt-slot ${slot === s ? "appt-slot-active" : ""}`}
-                      onClick={() => { setSlot(s); setBookError(""); }}
-                      aria-pressed={slot === s}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                </div>
+                {loadingSlots ? (
+                  <p role="status">Loading available times…</p>
+                ) : null}
+                {!loadingSlots && availabilityMessage ? (
+                  <p role="status">{availabilityMessage}</p>
+                ) : null}
               </>
             )}
 
@@ -194,7 +247,7 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
                 onClick={handleConfirm}
                 disabled={!canConfirm}
               >
-                {sending ? "Booking..." : "Confirm Appointment"}
+                {sending ? "Booking..." : "Confirm appointment"}
               </button>
             </div>
           </>

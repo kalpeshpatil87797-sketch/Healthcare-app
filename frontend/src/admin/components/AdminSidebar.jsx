@@ -72,7 +72,7 @@ export default function AdminSidebar({
       <aside
         id="admin-sidebar"
         className={`admin-sidebar${open ? " is-open" : ""}`}
-        aria-label="Super Admin navigation"
+        aria-label="Admin navigation"
       >
         <div className="admin-sidebar-brand">
           <span className="admin-brand-mark" aria-hidden="true">
@@ -118,8 +118,8 @@ export default function AdminSidebar({
               {getInitials(adminUser?.name)}
             </span>
             <span className="admin-sidebar-user-text">
-              <strong>{adminUser?.name || "Super Admin"}</strong>
-              <span>{adminUser?.email || "Super administrator"}</span>
+              <strong>{adminUser?.name || "Administrator"}</strong>
+              <span>{adminUser?.email || adminUser?.role || "Administrator"}</span>
             </span>
           </div>
           <button type="button" className="admin-signout" onClick={onSignOut}>

@@ -1,8 +1,15 @@
 import { useMemo, useState } from "react";
-import { getAdminUsers, updateUserStatus } from "../adminApi";
+import { useOutletContext } from "react-router-dom";
+import {
+  getAdminUsers,
+  removeDoctorProfile,
+  updateUserRole,
+  updateUserStatus,
+} from "../adminApi";
 import {
   ACCOUNT_STATUS_OPTIONS,
   PAGE_SIZE_OPTIONS,
+  ROOT_OWNER_ROLE,
   USER_ROLE_OPTIONS,
 } from "../adminConstants";
 import { formatDate, formatNumber } from "../format";
@@ -17,6 +24,8 @@ import {
 import {
   AccountStatusBadge,
   ConfirmStatusDialog,
+  ConfirmRoleChangeDialog,
+  ConfirmRemoveDoctorDialog,
   RoleBadge,
   UserDetailDialog,
 } from "../components/UserDialogs";
@@ -33,6 +42,8 @@ function SortIndicator({ active, order }) {
 }
 
 export default function AdminUsers() {
+  const { adminUser } = useOutletContext();
+  const canManageAdmins = adminUser?.role === ROOT_OWNER_ROLE;
   const [searchInput, setSearchInput] = useState("");
   const [role, setRole] = useState("");
   const [accountStatus, setAccountStatus] = useState("");
@@ -43,8 +54,14 @@ export default function AdminUsers() {
 
   const [detailUserId, setDetailUserId] = useState(null);
   const [pendingChange, setPendingChange] = useState(null);
+  const [pendingRoleChange, setPendingRoleChange] = useState(null);
+  const [pendingDoctorRemoval, setPendingDoctorRemoval] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRoleSubmitting, setIsRoleSubmitting] = useState(false);
+  const [isDoctorRemovalSubmitting, setIsDoctorRemovalSubmitting] = useState(false);
   const [changeError, setChangeError] = useState(null);
+  const [roleChangeError, setRoleChangeError] = useState(null);
+  const [doctorRemovalError, setDoctorRemovalError] = useState(null);
   const [notice, setNotice] = useState(null);
 
   const debouncedSearch = useDebouncedValue(searchInput.trim(), 350);
@@ -89,7 +106,16 @@ export default function AdminUsers() {
       key: "role",
       label: "Role",
       sortable: true,
-      render: (user) => <RoleBadge role={user.role} />,
+      render: (user) => (
+        <div className="admin-detail-badges">
+          <RoleBadge role={user.role} />
+          {user.doctorProfile?.isActive === false ? (
+            <span className="admin-badge admin-badge-profile-removed">
+              Doctor profile: Removed
+            </span>
+          ) : null}
+        </div>
+      ),
     },
     {
       key: "accountStatus",
@@ -213,6 +239,34 @@ export default function AdminUsers() {
     }
   }
 
+  async function handleConfirmDoctorRemoval() {
+    if (!pendingDoctorRemoval || isDoctorRemovalSubmitting) return;
+
+    setIsDoctorRemovalSubmitting(true);
+    setDoctorRemovalError(null);
+    try {
+      const result = await removeDoctorProfile(
+        pendingDoctorRemoval.doctorProfile._id
+      );
+      const name =
+        result?.user?.name || pendingDoctorRemoval.name || "Account";
+      setNotice({
+        tone: "warning",
+        message:
+          result?.user?.role === "patient"
+            ? `${name} is now listed as Patient. The doctor profile was removed; patient access and all records were preserved.`
+            : `${name}'s doctor profile was removed. Account access and all records were preserved.`,
+      });
+      setPendingDoctorRemoval(null);
+      setDetailUserId(null);
+      refresh();
+    } catch (err) {
+      setDoctorRemovalError(err);
+    } finally {
+      setIsDoctorRemovalSubmitting(false);
+    }
+  }
+
   let emptyTitle = "No users yet";
   let emptyDescription =
     "Patient, doctor, and admin accounts will appear here once they register.";
@@ -258,6 +312,19 @@ export default function AdminUsers() {
           <span className="admin-ro-pill">Account status</span>
         </div>
       </header>
+
+      {canManageAdmins ? (
+        <section className="admin-role-management" aria-labelledby="admin-role-management-heading">
+          <div>
+            <p className="admin-eyebrow">Privileged access</p>
+            <h2 id="admin-role-management-heading">Admin Management</h2>
+            <p>
+              Promote verified accounts to Admin or restore an Admin to their saved
+              patient or doctor role. Role changes revoke active sessions.
+            </p>
+          </div>
+        </section>
+      ) : null}
 
       <p className="admin-visually-hidden" aria-live="polite">
         {announcement}
@@ -471,13 +538,23 @@ export default function AdminUsers() {
         </div>
       )}
 
-      {detailUserId && !pendingChange ? (
+      {detailUserId && !pendingChange && !pendingDoctorRemoval ? (
         <UserDetailDialog
           userId={detailUserId}
+          canManageRoles={canManageAdmins}
           onClose={() => setDetailUserId(null)}
+          onChangeRole={(user, nextRole) => {
+            setRoleChangeError(null);
+            setDetailUserId(null);
+            setPendingRoleChange({ user, nextRole });
+          }}
           onChangeStatus={(user, nextStatus) => {
             setChangeError(null);
             setPendingChange({ user, nextStatus });
+          }}
+          onRemoveDoctor={(user) => {
+            setDoctorRemovalError(null);
+            setPendingDoctorRemoval(user);
           }}
         />
       ) : null}
@@ -490,6 +567,64 @@ export default function AdminUsers() {
           onConfirm={handleConfirmStatusChange}
           isSubmitting={isSubmitting}
           error={changeError}
+        />
+      ) : null}
+
+      {pendingDoctorRemoval ? (
+        <ConfirmRemoveDoctorDialog
+          user={pendingDoctorRemoval}
+          doctorProfile={pendingDoctorRemoval.doctorProfile}
+          onClose={() => {
+            if (isDoctorRemovalSubmitting) return;
+            setPendingDoctorRemoval(null);
+            setDoctorRemovalError(null);
+          }}
+          onConfirm={handleConfirmDoctorRemoval}
+          isSubmitting={isDoctorRemovalSubmitting}
+          error={doctorRemovalError}
+        />
+      ) : null}
+
+      {pendingRoleChange ? (
+        <ConfirmRoleChangeDialog
+          user={pendingRoleChange.user}
+          nextRole={pendingRoleChange.nextRole}
+          onClose={() => {
+            if (isRoleSubmitting) return;
+            setPendingRoleChange(null);
+            setRoleChangeError(null);
+          }}
+          onConfirm={async () => {
+            if (isRoleSubmitting) return;
+            setIsRoleSubmitting(true);
+            setRoleChangeError(null);
+            try {
+              const result = await updateUserRole(
+                pendingRoleChange.user._id,
+                pendingRoleChange.nextRole
+              );
+              const name =
+                result?.user?.name || pendingRoleChange.user.name || "Account";
+              setNotice({
+                tone:
+                  pendingRoleChange.nextRole === "admin"
+                    ? "warning"
+                    : "success",
+                message:
+                  pendingRoleChange.nextRole === "admin"
+                    ? `${name} was promoted to Admin. Their previous sessions were revoked.`
+                    : `${name} had Admin access revoked and was restored to their saved role.`,
+              });
+              setPendingRoleChange(null);
+              refresh();
+            } catch (err) {
+              setRoleChangeError(err);
+            } finally {
+              setIsRoleSubmitting(false);
+            }
+          }}
+          isSubmitting={isRoleSubmitting}
+          error={roleChangeError}
         />
       ) : null}
     </div>

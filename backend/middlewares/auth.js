@@ -51,7 +51,7 @@ async function restrictToLoggedinUserOnly(req, res, next) {
 
     if (isSuspended(user)) {
       return res.status(403).json({
-        error: "This account has been suspended. Please contact a Super Admin.",
+        error: "This account has been suspended. Please contact the Root Owner.",
         code: "ACCOUNT_SUSPENDED",
       });
     }
@@ -136,12 +136,18 @@ function requireRole(...roles) {
 
       if (isSuspended(currentUser)) {
         return res.status(403).json({
-          error: "This account has been suspended. Please contact a Super Admin.",
+          error: "This account has been suspended. Please contact the Root Owner.",
           code: "ACCOUNT_SUSPENDED",
         });
       }
 
       if (!allowedRoles.includes(currentUser.role)) {
+        if (allowedRoles.includes("root_owner")) {
+          return res.status(403).json({
+            error: "Only the Root Owner can manage admin roles.",
+            code: "ROOT_OWNER_REQUIRED",
+          });
+        }
         return res.status(403).json({ error: "Forbidden", code: "FORBIDDEN" });
       }
 

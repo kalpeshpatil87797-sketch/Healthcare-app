@@ -7,8 +7,10 @@ const {
   handleUpdateAppointmentStatus,
   handleGetAdminDoctor,
   handleUpdateDoctorApproval,
+  handleRemoveDoctor,
   handleGetAdminUser,
   handleUpdateUserStatus,
+  handleUpdateUserRole,
 } = require("../controllers/admin");
 const { restrictToLoggedinUserOnly, requireRole } = require("../middlewares/auth");
 
@@ -19,15 +21,17 @@ router.use((req, res, next) => {
   next();
 });
 
-router.use(restrictToLoggedinUserOnly, requireRole("super_admin"));
+router.use(restrictToLoggedinUserOnly, requireRole("root_owner", "admin"));
 
 router.get("/stats", handleGetAdminStats);
 router.get("/users", handleListUsers);
 router.get("/users/:id", handleGetAdminUser);
 router.patch("/users/:id/status", handleUpdateUserStatus);
+router.patch("/users/:id/role", requireRole("root_owner"), handleUpdateUserRole);
 router.get("/doctors", handleListDoctors);
 router.get("/doctors/:id", handleGetAdminDoctor);
 router.patch("/doctors/:id/approval", handleUpdateDoctorApproval);
+router.patch("/doctors/:id/remove", handleRemoveDoctor);
 router.get("/appointments", handleListAppointments);
 router.patch("/appointments/:id/status", handleUpdateAppointmentStatus);
 

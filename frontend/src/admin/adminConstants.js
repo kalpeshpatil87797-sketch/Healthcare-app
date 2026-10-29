@@ -1,16 +1,21 @@
-export const SUPER_ADMIN_ROLE = "super_admin";
+export const ADMIN_ROLES = ["admin", "root_owner"];
+export const ROOT_OWNER_ROLE = "root_owner";
 
 export const ROLE_LABELS = {
   patient: "Patient",
   doctor: "Doctor",
-  super_admin: "Super admin",
+  admin: "Admin",
+  root_owner: "Root Owner",
+  super_admin: "Legacy Super Admin",
 };
 
 export const USER_ROLE_OPTIONS = [
   { value: "", label: "All roles" },
   { value: "patient", label: "Patients" },
   { value: "doctor", label: "Doctors" },
-  { value: "super_admin", label: "Super admins" },
+  { value: "admin", label: "Admins" },
+  { value: "root_owner", label: "Root Owner" },
+  { value: "super_admin", label: "Legacy Super Admins" },
 ];
 
 export const ACCOUNT_STATUS_LABELS = {
@@ -40,7 +45,7 @@ export const APPOINTMENT_STATUS_ORDER = [
 
 export const APPOINTMENT_STATUS_LABELS = {
   pending: "Pending",
-  accepted: "Accepted",
+  accepted: "Confirmed",
   alternate_requested: "Alternate requested",
   rejected: "Rejected",
   cancelled: "Cancelled",
@@ -56,9 +61,10 @@ export const APPOINTMENT_STATUS_OPTIONS = [
 ];
 
 export const APPOINTMENT_TRANSITION_LABELS = {
-  accepted: "Accept appointment",
+  accepted: "Confirm appointment",
   rejected: "Reject appointment",
   cancelled: "Cancel appointment",
+  completed: "Mark completed",
 };
 
 export const AVAILABILITY_OPTIONS = [

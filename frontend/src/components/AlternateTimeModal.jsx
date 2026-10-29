@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
-import { MORNING_SLOTS, AFTERNOON_SLOTS } from "./AppointmentModal";
 import "../pages/Chat.css";
 
 const API_BASE = "http://localhost:8001";
@@ -14,11 +13,33 @@ function todayLocalISO() {
 
 // Doctor proposes an alternative slot for a pending appointment. Calls the
 // existing STEP 2 alternate API; the patient's original request is kept.
-export default function AlternateTimeModal({ appointmentId, onClose, onSuggested }) {
+export default function AlternateTimeModal({ appointmentId, doctorId, onClose, onSuggested }) {
   const [date, setDate] = useState("");
   const [slot, setSlot] = useState(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+
+  useEffect(() => {
+    if (!date || !doctorId) return undefined;
+    const controller = new AbortController();
+    const token = localStorage.getItem("token");
+    axios.get(`${API_BASE}/doctor/${doctorId}/availability`, {
+      params: { date },
+      signal: controller.signal,
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(({ data }) => {
+      setSlots(data.availableSlots ?? []);
+    }).catch((err) => {
+      if (!controller.signal.aborted) {
+        setError(err.response?.data?.error ?? "Could not load available times.");
+      }
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoadingSlots(false);
+    });
+    return () => controller.abort();
+  }, [date, doctorId]);
 
   if (!appointmentId) return null;
 
@@ -70,6 +91,8 @@ export default function AlternateTimeModal({ appointmentId, onClose, onSuggested
           onChange={(e) => {
             setDate(e.target.value);
             setSlot(null);
+            setSlots([]);
+            setLoadingSlots(Boolean(e.target.value));
             setError("");
           }}
         />
@@ -77,7 +100,7 @@ export default function AlternateTimeModal({ appointmentId, onClose, onSuggested
           <>
             <p className="appt-label">Alternative time slots</p>
             <div className="appt-slots">
-              {[...MORNING_SLOTS, ...AFTERNOON_SLOTS].map((s) => (
+              {slots.map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -89,6 +112,8 @@ export default function AlternateTimeModal({ appointmentId, onClose, onSuggested
                 </button>
               ))}
             </div>
+            {loadingSlots ? <p role="status">Loading available times…</p> : null}
+            {!loadingSlots && slots.length === 0 ? <p>No available times.</p> : null}
           </>
         )}
         {error && <div className="upload-error">{error}</div>}

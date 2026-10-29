@@ -9,7 +9,19 @@ const userSchema = new mongoose.Schema(
     age: { type: Number, required: true },
     phone: { type: String, required: true },
     address: { type: String, required: true },
-    role: { type: String, enum: ["patient", "doctor", "super_admin"], default: "patient" },
+    // super_admin remains a legacy value so unmigrated records remain readable.
+    // It is intentionally not accepted by any dashboard role transition.
+    role: { type: String, enum: ["patient", "doctor", "admin", "root_owner", "super_admin"], default: "patient" },
+    roleBeforeAdmin: {
+      type: String,
+      enum: ["patient", "doctor"],
+      select: false,
+    },
+    roleBeforeSuperAdmin: {
+      type: String,
+      enum: ["patient", "doctor"],
+      select: false,
+    },
     accountStatus: {
       type: String,
       enum: ["active", "suspended"],
@@ -28,6 +40,14 @@ const userSchema = new mongoose.Schema(
 );
 
 userSchema.index({ role: 1, accountStatus: 1 });
+userSchema.index(
+  { role: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { role: "root_owner" },
+    name: "unique_root_owner_role",
+  }
+);
 
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();

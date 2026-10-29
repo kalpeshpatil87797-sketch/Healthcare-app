@@ -3,14 +3,14 @@
 // only for the doctor on pending requests, status line for the patient.
 const STATUS_LABEL = {
   pending: "Pending",
-  accepted: "Accepted",
+  accepted: "Confirmed",
   alternate_requested: "Alternate Suggested",
   rejected: "Rejected",
   cancelled: "Cancelled",
   completed: "Completed",
 };
 
-export function formatApptDate(iso) {
+function formatApptDate(iso) {
   if (!iso) return "";
   const parts = String(iso).split("-");
   if (parts.length !== 3) return String(iso);
@@ -58,6 +58,11 @@ export default function AppointmentCard({
       <p className="appt-card-row">
         <span>Requested Time:</span> <strong>{msg.appointmentTime}</strong>
       </p>
+      {msg.appointmentReason ? (
+        <p className="appt-card-row">
+          <span>Visit reason:</span> <strong>{msg.appointmentReason}</strong>
+        </p>
+      ) : null}
 
       {status === "alternate_requested" && msg.alternateDate && (
         <div className="appt-alternate-box">

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import Layout from "../components/Layout";
+import AppointmentDashboard from "../components/AppointmentDashboard";
 import "./Home.css";
 
 const API_BASE = "http://localhost:8001";
@@ -19,7 +20,14 @@ function Home() {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (res.data?.name) setName(res.data.name);
-        if (res.data?.role === "doctor") setRole("doctor");
+        const status = res.data?.doctorApprovalStatus;
+        setRole(
+          ["patient", "doctor"].includes(res.data?.role) &&
+            status === "approved" &&
+            res.data?.doctorProfileActive !== false
+            ? "doctor"
+            : "patient"
+        );
       } catch {
         // Stay on patient defaults; page remains fully usable.
       }
@@ -49,6 +57,8 @@ function Home() {
             <p>Use reliable information as a starting point, and speak with a qualified professional about personal medical concerns.</p>
           </aside>
         </section>
+
+        <AppointmentDashboard role={role} />
 
         <section className="care-services" aria-labelledby="care-services-title">
           <div className="care-section-heading">

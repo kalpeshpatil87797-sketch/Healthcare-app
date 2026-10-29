@@ -9,6 +9,7 @@ import Medicine from "./pages/Medicine";
 import ImDoctor from "./pages/ImDoctor";
 import NearbyDoctors from "./pages/NearbyDoctors";
 import Profile from "./pages/Profile";
+import DoctorVerification from "./pages/DoctorVerification";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -29,6 +30,7 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/dashboard" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        <Route path="/doctor/verification" element={<ProtectedRoute><DoctorVerification /></ProtectedRoute>} />
         <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
         <Route path="/look" element={<ProtectedRoute><Look /></ProtectedRoute>} />
         <Route path="/medicine" element={<ProtectedRoute><Medicine /></ProtectedRoute>} />

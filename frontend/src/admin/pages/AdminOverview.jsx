@@ -58,7 +58,8 @@ function OverviewContent({ data }) {
   const usersTotal = users.total ?? 0;
   const patients = roles.patient ?? 0;
   const doctorAccounts = roles.doctor ?? 0;
-  const superAdmins = roles.super_admin ?? 0;
+  const admins = roles.admin ?? 0;
+  const rootOwners = roles.root_owner ?? 0;
 
   const doctorProfiles = doctors.totalProfiles ?? 0;
   const availableDoctors = doctors.available ?? 0;
@@ -89,9 +90,9 @@ function OverviewContent({ data }) {
           accent="navy"
         />
         <StatCard
-          label="Super admins"
-          value={superAdmins}
-          helper="Administrative accounts"
+          label="Admin accounts"
+          value={admins + rootOwners}
+          helper={`${admins} Admin${admins === 1 ? "" : "s"} · ${rootOwners} Root Owner${rootOwners === 1 ? "" : "s"}`}
           accent="amber"
         />
       </div>

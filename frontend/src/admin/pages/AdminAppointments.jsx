@@ -221,7 +221,7 @@ export default function AdminAppointments() {
     setChangeError(null);
 
     try {
-      await updateAppointmentStatus(
+      const response = await updateAppointmentStatus(
         pendingChange.appointment._id,
         pendingChange.nextStatus
       );
@@ -234,7 +234,10 @@ export default function AdminAppointments() {
       setNotice({
         tone:
           pendingChange.nextStatus === "accepted" ? "success" : "warning",
-        message: `Appointment for ${patientName} was marked ${statusLabel.toLowerCase()}. The chat card was updated and no records were deleted.`,
+        message: `Appointment for ${patientName} was marked ${statusLabel.toLowerCase()}. ${
+          response.notificationWarning ||
+          "The chat card was updated and no records were deleted."
+        }`,
       });
       setPendingChange(null);
       setDetailAppointment(null);

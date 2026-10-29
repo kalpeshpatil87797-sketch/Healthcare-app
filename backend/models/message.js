@@ -53,6 +53,7 @@ const messageSchema = new mongoose.Schema(
     appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: "appointment" },
     appointmentDate: { type: String },
     appointmentTime: { type: String },
+    appointmentReason: { type: String, maxlength: 500 },
     appointmentStatus: {
       type: String,
       enum: ["pending", "accepted", "alternate_requested", "rejected", "cancelled", "completed"],

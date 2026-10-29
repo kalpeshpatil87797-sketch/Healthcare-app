@@ -2,6 +2,7 @@ const express = require("express");
 const {
   handleUserSignup,
   handleUserLogin,
+  handleLeaveDoctorRole,
   handleForgotPassword,
   handleResetPassword,
   handleGetProfile,
@@ -15,6 +16,7 @@ const router = express.Router();
 
 router.post("/signup", handleUserSignup);
 router.post("/login",authLimiter, handleUserLogin);
+router.post("/doctor/leave", restrictToLoggedinUserOnly, handleLeaveDoctorRole);
 router.post("/forgot-password", handleForgotPassword);
 router.post("/reset-password/:token", handleResetPassword);
 router.get("/me", restrictToLoggedinUserOnly, handleGetProfile);

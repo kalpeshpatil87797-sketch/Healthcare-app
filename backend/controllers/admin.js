@@ -5,7 +5,10 @@ const Doctor = require("../models/doctor");
 const Appointment = require("../models/appointment");
 const Connection = require("../models/connection");
 const AdminActionLock = require("../models/adminActionLock");
-const { syncAppointmentMessage } = require("./appointment");
+const {
+  populateAppointmentSafely,
+  syncAppointmentMessageSafely,
+} = require("./appointment");
 const {
   acquireAppointmentSlotLock,
   releaseAppointmentSlotLock,
@@ -15,6 +18,8 @@ const USER_ROLES = User.schema.path("role").enumValues;
 const ACCOUNT_STATUSES = User.schema.path("accountStatus").enumValues;
 const DOCTOR_APPROVAL_STATUSES = Doctor.schema.path("approvalStatus").enumValues;
 const APPOINTMENT_STATUSES = Appointment.schema.path("status").enumValues;
+const NORMAL_USER_ROLES = ["patient", "doctor"];
+const ASSIGNABLE_USER_ROLES = ["patient", "doctor", "admin"];
 
 const STATUS_LOCK_ID = "user-account-status";
 const STATUS_LOCK_TTL_MS = 30 * 1000;
@@ -22,7 +27,7 @@ const STATUS_LOCK_RETRIES = 4;
 const STATUS_LOCK_RETRY_MS = 75;
 
 const USER_SORT_FIELDS = ["createdAt", "name", "email", "role"];
-const DOCTOR_SORT_FIELDS = ["createdAt", "name", "specialist", "isAvailable"];
+const DOCTOR_SORT_FIELDS = ["createdAt", "submittedAt", "name", "specialist", "isAvailable"];
 const APPOINTMENT_SORT_FIELDS = [
   "appointmentDate",
   "status",
@@ -30,11 +35,11 @@ const APPOINTMENT_SORT_FIELDS = [
   "updatedAt",
 ];
 
-// These are the only status changes already supported by the patient/doctor
-// workflows. Terminal states stay terminal, and completion has no workflow yet.
+// Terminal states stay terminal; confirmed appointments can be cancelled or completed.
 const APPOINTMENT_TRANSITIONS = Object.freeze({
   pending: ["accepted", "rejected", "cancelled"],
-  alternate_requested: ["accepted"],
+  accepted: ["cancelled", "completed"],
+  alternate_requested: ["accepted", "cancelled"],
 });
 
 const DEFAULT_PAGE = 1;
@@ -114,6 +119,17 @@ function normalizeDoctorApproval(value) {
   return value === "pending" || value === "rejected" ? value : "approved";
 }
 
+function getEffectiveUserRole(user, doctorProfile) {
+  return user.role === "doctor" &&
+    (
+      doctorProfile?.isActive === false ||
+      doctorProfile?.approvalStatus === "pending" ||
+      doctorProfile?.approvalStatus === "rejected"
+    )
+    ? "patient"
+    : user.role;
+}
+
 function parseDoctorApproval(value) {
   if (value === undefined) return "";
   if (typeof value !== "string") return null;
@@ -168,6 +184,17 @@ function toAdminAppointmentView(appointment) {
     status: appointment.status,
     alternateDate: appointment.alternateDate ?? null,
     alternateTime: appointment.alternateTime ?? null,
+    visitReason: appointment.visitReason ?? "",
+    history: (appointment.history ?? []).map(
+      ({ event, fromDate, fromTime, toDate, toTime, occurredAt }) => ({
+        event,
+        fromDate: fromDate ?? null,
+        fromTime: fromTime ?? null,
+        toDate: toDate ?? null,
+        toTime: toTime ?? null,
+        occurredAt,
+      })
+    ),
     requestedAt: appointment.createdAt,
     updatedAt: appointment.updatedAt,
     patient: patient
@@ -309,18 +336,50 @@ async function handleListUsers(req, res) {
       return res.status(400).json({ error: "Invalid account status filter" });
     }
 
-    const query = {};
-    if (role) query.role = role;
+    const conditions = [];
+    let removedDoctorEmails = [];
+    if (role === "patient" || role === "doctor") {
+      const latestInactiveProfiles = await Doctor.aggregate([
+        { $match: { registeredBy: { $type: "string" } } },
+        { $sort: { updatedAt: -1, _id: -1 } },
+        {
+          $group: {
+            _id: "$registeredBy",
+            isActive: { $first: "$isActive" },
+          },
+        },
+        { $match: { isActive: false } },
+        { $project: { _id: 1 } },
+      ]);
+      removedDoctorEmails = latestInactiveProfiles.map((profile) => profile._id);
+    }
+
+    if (role === "patient") {
+      conditions.push({
+        $or: [
+          { role: "patient" },
+          { role: "doctor", email: { $in: removedDoctorEmails } },
+        ],
+      });
+    } else if (role === "doctor") {
+      conditions.push({ role: "doctor" });
+      if (removedDoctorEmails.length) {
+        conditions.push({ email: { $nin: removedDoctorEmails } });
+      }
+    } else if (role) {
+      conditions.push({ role });
+    }
     if (accountStatus === "active") {
       // Legacy users without the field are active.
-      query.accountStatus = { $ne: "suspended" };
+      conditions.push({ accountStatus: { $ne: "suspended" } });
     } else if (accountStatus === "suspended") {
-      query.accountStatus = "suspended";
+      conditions.push({ accountStatus: "suspended" });
     }
     if (search) {
       const regex = new RegExp(escapeRegExp(search), "i");
-      query.$or = [{ name: regex }, { email: regex }];
+      conditions.push({ $or: [{ name: regex }, { email: regex }] });
     }
+    const query = conditions.length ? { $and: conditions } : {};
 
     const { page, limit } = pagination;
     const { sort, order } = sortOptions;
@@ -336,10 +395,38 @@ async function handleListUsers(req, res) {
       User.countDocuments(query),
     ]);
 
-    const data = users.map((user) => ({
-      ...user,
-      accountStatus: normalizeAccountStatus(user.accountStatus),
-    }));
+    const emails = users.map((user) => user.email).filter(Boolean);
+    const doctorProfiles = emails.length
+      ? await Doctor.find({ registeredBy: { $in: emails } })
+          .select("_id registeredBy approvalStatus isActive isAvailable submittedAt createdAt")
+          .sort({ updatedAt: -1, _id: -1 })
+          .lean()
+      : [];
+    const doctorProfilesByEmail = new Map();
+    doctorProfiles.forEach((doctor) => {
+      if (!doctorProfilesByEmail.has(doctor.registeredBy)) {
+        doctorProfilesByEmail.set(doctor.registeredBy, doctor);
+      }
+    });
+
+    const data = users.map((user) => {
+      const doctorProfile = doctorProfilesByEmail.get(user.email);
+
+      return {
+        ...user,
+        role: getEffectiveUserRole(user, doctorProfile),
+        accountStatus: normalizeAccountStatus(user.accountStatus),
+        doctorProfile: doctorProfile
+          ? {
+              _id: doctorProfile._id,
+              approvalStatus: normalizeDoctorApproval(doctorProfile.approvalStatus),
+              isActive: doctorProfile.isActive !== false,
+              isAvailable: doctorProfile.isAvailable !== false,
+              submittedAt: doctorProfile.submittedAt ?? doctorProfile.createdAt ?? null,
+            }
+          : null,
+      };
+    });
 
     return res.status(200).json({
       data,
@@ -358,7 +445,7 @@ async function handleListDoctors(req, res) {
       return res.status(400).json({ error: "Invalid pagination parameters" });
     }
 
-    const sortOptions = parseSort(req.query, DOCTOR_SORT_FIELDS, "createdAt");
+    const sortOptions = parseSort(req.query, DOCTOR_SORT_FIELDS, "submittedAt");
     if (!sortOptions) {
       return res.status(400).json({ error: "Invalid sort parameters" });
     }
@@ -407,12 +494,14 @@ async function handleListDoctors(req, res) {
     if (isAvailable === true) {
       conditions.push(
         { approvalStatus: { $nin: ["pending", "rejected"] } },
+        { isActive: { $ne: false } },
         { isAvailable: true }
       );
     } else if (isAvailable === false) {
       conditions.push({
         $or: [
           { approvalStatus: { $in: ["pending", "rejected"] } },
+          { isActive: false },
           { isAvailable: false },
         ],
       });
@@ -426,7 +515,7 @@ async function handleListDoctors(req, res) {
     const [doctors, total] = await Promise.all([
       Doctor.find(query)
         .select(
-          "_id name clinicName degree specialist clinicLocation registeredBy isAvailable approvalStatus rejectionReason reviewedAt location createdAt updatedAt"
+          "_id name clinicName degree specialist clinicLocation registeredBy isActive isAvailable approvalStatus submittedAt rejectionReason reviewedAt location createdAt updatedAt"
         )
         .sort(sortSpec)
         .skip((page - 1) * limit)
@@ -455,10 +544,14 @@ async function handleListDoctors(req, res) {
         clinicLocation: doctor.clinicLocation,
         registeredBy: doctor.registeredBy,
         approvalStatus: doctorApprovalStatus,
+        isActive: doctor.isActive !== false,
+        submittedAt: doctor.submittedAt ?? doctor.createdAt ?? null,
         rejectionReason: doctor.rejectionReason || "",
         reviewedAt: doctor.reviewedAt ?? null,
         isAvailable:
-          doctorApprovalStatus === "approved" && doctor.isAvailable !== false,
+          doctorApprovalStatus === "approved" &&
+            doctor.isActive !== false &&
+            doctor.isAvailable !== false,
         latitude: doctor.location?.coordinates?.[1] ?? null,
         longitude: doctor.location?.coordinates?.[0] ?? null,
         linkedUser: usersByEmail.get(doctor.registeredBy) ?? null,
@@ -583,7 +676,13 @@ async function handleUpdateAppointmentStatus(req, res) {
   }
 
   const body = req.body;
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(body, "status")
+  ) {
     return res.status(400).json({ error: "Invalid request body", code: "INVALID_BODY" });
   }
 
@@ -684,13 +783,41 @@ async function handleUpdateAppointmentStatus(req, res) {
       }
     }
 
+    const acceptingAlternate =
+      status === "accepted" && appointment.status === "alternate_requested";
     const updated = await Appointment.findOneAndUpdate(
       { _id: id, status: appointment.status },
-      { $set: { status } },
+      {
+        $set: {
+          status,
+          ...(acceptingAlternate
+            ? {
+                appointmentDate: appointment.alternateDate,
+                appointmentTime: appointment.alternateTime,
+              }
+            : {}),
+        },
+        ...(acceptingAlternate
+          ? { $unset: { alternateDate: 1, alternateTime: 1 } }
+          : {}),
+        $push: {
+          history: {
+            event: status,
+            actorId,
+            actorRole: req.currentUser?.role ?? "admin",
+            fromDate: appointment.appointmentDate,
+            fromTime: appointment.appointmentTime,
+            ...(acceptingAlternate
+              ? {
+                  toDate: appointment.alternateDate,
+                  toTime: appointment.alternateTime,
+                }
+              : {}),
+          },
+        },
+      },
       { new: true, runValidators: true }
-    )
-      .populate("patientId", "name email age")
-      .populate("doctorId", "name specialist clinicName registeredBy");
+    );
 
     if (!updated) {
       return res.status(409).json({
@@ -699,7 +826,13 @@ async function handleUpdateAppointmentStatus(req, res) {
       });
     }
 
-    await syncAppointmentMessage(updated);
+    const notificationWarning = [
+      await syncAppointmentMessageSafely(updated),
+      await populateAppointmentSafely(updated, [
+        ["patientId", "name email age"],
+        ["doctorId", "name specialist clinicName registeredBy"],
+      ]),
+    ].filter(Boolean).join(" ");
 
     console.info(
       `[admin-audit] action=appointment.change_status actor=${actorId} target=${appointment._id} ${appointment.status}->${status} at=${new Date().toISOString()}`
@@ -709,6 +842,7 @@ async function handleUpdateAppointmentStatus(req, res) {
       message: `Appointment marked ${status.replace(/_/g, " ")}`,
       changed: true,
       appointment: toAdminAppointmentView(updated.toObject()),
+      notificationWarning,
     });
   } catch (err) {
     if (err?.code === 11000) {
@@ -733,7 +867,7 @@ async function handleGetAdminDoctor(req, res) {
 
     const doctor = await Doctor.findById(id)
       .select(
-        "_id name clinicName degree specialist clinicLocation registeredBy isAvailable approvalStatus rejectionReason reviewedBy reviewedAt location createdAt updatedAt"
+      "_id name clinicName degree specialist clinicLocation registeredBy isActive isAvailable approvalStatus submittedAt rejectionReason reviewedBy reviewedAt location createdAt updatedAt"
       )
       .lean();
 
@@ -763,11 +897,15 @@ async function handleGetAdminDoctor(req, res) {
         clinicLocation: doctor.clinicLocation,
         registeredBy: doctor.registeredBy,
         approvalStatus,
+        isActive: doctor.isActive !== false,
+        submittedAt: doctor.submittedAt ?? doctor.createdAt ?? null,
         rejectionReason: doctor.rejectionReason || "",
         reviewedBy: doctor.reviewedBy ?? null,
         reviewedAt: doctor.reviewedAt ?? null,
         isAvailable:
-          approvalStatus === "approved" && doctor.isAvailable !== false,
+          approvalStatus === "approved" &&
+          doctor.isActive !== false &&
+          doctor.isAvailable !== false,
         latitude: doctor.location?.coordinates?.[1] ?? null,
         longitude: doctor.location?.coordinates?.[0] ?? null,
         linkedUser: linkedUser ?? null,
@@ -790,11 +928,20 @@ async function handleUpdateDoctorApproval(req, res) {
   }
 
   const body = req.body;
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    !Object.prototype.hasOwnProperty.call(body, "status")
+  ) {
     return res.status(400).json({ error: "Invalid request body", code: "INVALID_BODY" });
   }
 
   const { status } = body;
+  const allowedBodyKeys = status === "rejected" ? ["status", "reason"] : ["status"];
+  if (Object.keys(body).some((key) => !allowedBodyKeys.includes(key))) {
+    return res.status(400).json({ error: "Invalid request body", code: "INVALID_BODY" });
+  }
   if (status !== "approved" && status !== "rejected") {
     return res.status(400).json({
       error: "Approval status must be approved or rejected",
@@ -839,6 +986,7 @@ async function handleUpdateDoctorApproval(req, res) {
         ? {
             $set: {
               approvalStatus: "approved",
+              isActive: true,
               rejectionReason: "",
               reviewedBy: actorId,
               reviewedAt: new Date(),
@@ -870,8 +1018,35 @@ async function handleUpdateDoctorApproval(req, res) {
       });
     }
 
+    let linkedUser = null;
+    let userRoleTransition = "";
+    if (target.registeredBy) {
+      if (status === "approved") {
+        linkedUser = await User.findOneAndUpdate(
+          { email: target.registeredBy, role: "patient" },
+          { $set: { role: "doctor" } },
+          { new: true, runValidators: true }
+        )
+          .select("_id name email role accountStatus")
+          .lean();
+        if (linkedUser) userRoleTransition = " user_role=patient->doctor";
+      } else {
+        linkedUser = await User.findOneAndUpdate(
+          { email: target.registeredBy, role: "doctor" },
+          {
+            $set: { role: "patient" },
+            $inc: { tokenVersion: 1 },
+          },
+          { new: true, runValidators: true }
+        )
+          .select("_id name email role accountStatus")
+          .lean();
+        if (linkedUser) userRoleTransition = " user_role=doctor->patient";
+      }
+    }
+
     console.info(
-      `[admin-audit] action=doctor.${status === "approved" ? "approve" : "reject"} actor=${actorId} target=${target._id} pending->${status} at=${new Date().toISOString()}`
+      `[admin-audit] action=doctor.${status === "approved" ? "approve" : "reject"} actor=${actorId} target=${target._id} pending->${status}${userRoleTransition} at=${new Date().toISOString()}`
     );
 
     return res.status(200).json({
@@ -884,10 +1059,116 @@ async function handleUpdateDoctorApproval(req, res) {
         ...updated,
         approvalStatus: normalizeDoctorApproval(updated.approvalStatus),
       },
+      ...(linkedUser ? { user: linkedUser } : {}),
     });
   } catch (err) {
     console.error("Admin doctor approval failed:", err.message);
     return res.status(500).json({ error: "Failed to update doctor approval" });
+  }
+}
+
+async function handleRemoveDoctor(req, res) {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "Invalid doctor id", code: "INVALID_DOCTOR_ID" });
+  }
+
+  try {
+    const actor = await User.findById(req.currentUser?._id ?? req.user?._id)
+      .select("_id role accountStatus")
+      .lean();
+    if (!actor || !["admin", "root_owner"].includes(actor.role)) {
+      return res.status(403).json({ error: "Only Admins and the Root Owner can remove doctor profiles.", code: "FORBIDDEN" });
+    }
+    if (normalizeAccountStatus(actor.accountStatus) === "suspended") {
+      return res.status(403).json({
+        error: "This account has been suspended. Contact the Root Owner.",
+        code: "ACCOUNT_SUSPENDED",
+      });
+    }
+
+    const removed = await Doctor.findOneAndUpdate(
+      {
+        _id: id,
+        approvalStatus: { $nin: ["pending", "rejected"] },
+        isActive: { $ne: false },
+      },
+      { $set: { isActive: false, isAvailable: false } },
+      { new: true, runValidators: true }
+    )
+      .select("_id name registeredBy approvalStatus isActive isAvailable")
+      .lean();
+
+    if (!removed) {
+      const current = await Doctor.findById(id).select("_id").lean();
+      if (!current) {
+        return res.status(404).json({ error: "Doctor not found", code: "DOCTOR_NOT_FOUND" });
+      }
+      return res.status(409).json({
+        error: "Only an active, approved doctor profile can be removed.",
+        code: "DOCTOR_NOT_ACTIVE",
+      });
+    }
+
+    let linkedUser = null;
+    let userRoleChanged = false;
+    let savedRoleChanged = false;
+    if (removed.registeredBy) {
+      const linkedAccount = await User.findOne({ email: removed.registeredBy })
+        .select("_id name email role accountStatus +roleBeforeAdmin")
+        .lean();
+
+      if (linkedAccount?.role === "doctor") {
+        linkedUser = await User.findOneAndUpdate(
+          { _id: linkedAccount._id, role: "doctor" },
+          {
+            $set: { role: "patient" },
+            $inc: { tokenVersion: 1 },
+          },
+          { new: true, runValidators: true }
+        )
+          .select("_id name email role accountStatus")
+          .lean();
+        userRoleChanged = Boolean(linkedUser);
+      } else if (
+        linkedAccount?.role === "admin" &&
+        linkedAccount.roleBeforeAdmin === "doctor"
+      ) {
+        await User.updateOne(
+          { _id: linkedAccount._id, role: "admin", roleBeforeAdmin: "doctor" },
+          { $set: { roleBeforeAdmin: "patient" } },
+          { runValidators: true }
+        );
+        savedRoleChanged = true;
+      }
+
+      if (!linkedUser && linkedAccount) {
+        linkedUser = await User.findById(linkedAccount._id)
+          .select("_id name email role accountStatus")
+          .lean();
+      }
+    }
+
+    console.info(
+      `[admin-audit] action=doctor.remove actor=${actor._id} target=${removed._id} approved->inactive${userRoleChanged ? " user_role=doctor->patient" : ""}${savedRoleChanged ? " admin_saved_role=doctor->patient" : ""} at=${new Date().toISOString()}`
+    );
+
+    return res.status(200).json({
+      message: "Doctor profile removed. Patient access and existing records were preserved.",
+      doctor: removed,
+      user: linkedUser
+        ? {
+            _id: linkedUser._id,
+            name: linkedUser.name,
+            email: linkedUser.email,
+            role: getEffectiveUserRole(linkedUser, removed),
+            accountStatus: normalizeAccountStatus(linkedUser.accountStatus),
+          }
+        : null,
+    });
+  } catch (err) {
+    console.error("Admin doctor removal failed:", err.message);
+    return res.status(500).json({ error: "Failed to remove doctor profile" });
   }
 }
 
@@ -947,21 +1228,23 @@ async function handleGetAdminUser(req, res) {
     }
 
     const user = await User.findById(id)
-      .select("_id name email role age phone address location accountStatus createdAt updatedAt")
+      .select("_id name email role age phone address location accountStatus createdAt updatedAt +roleBeforeAdmin +roleBeforeSuperAdmin")
       .lean();
 
     if (!user) {
       return res.status(404).json({ error: "User not found", code: "USER_NOT_FOUND" });
     }
 
+    const { roleBeforeAdmin, roleBeforeSuperAdmin, ...safeUser } = user;
     const normalizedUser = {
-      ...user,
+      ...safeUser,
       accountStatus: normalizeAccountStatus(user.accountStatus),
     };
 
     const [doctorProfile, appointmentsAsPatient, patientConnections] = await Promise.all([
       Doctor.findOne({ registeredBy: user.email })
-        .select("_id name clinicName degree specialist clinicLocation isAvailable createdAt")
+        .select("_id name clinicName degree specialist clinicLocation isActive isAvailable approvalStatus submittedAt rejectionReason reviewedAt createdAt")
+        .sort({ updatedAt: -1, _id: -1 })
         .lean(),
       Appointment.countDocuments({ patientId: user._id }),
       Connection.countDocuments({ patientId: user._id }),
@@ -972,28 +1255,72 @@ async function handleGetAdminUser(req, res) {
       doctorProfile ? Connection.countDocuments({ doctorId: doctorProfile._id }) : 0,
     ]);
 
+    const effectiveRole = getEffectiveUserRole(user, doctorProfile);
+    const savedRole =
+      roleBeforeAdmin === "doctor" &&
+        (
+          doctorProfile?.isActive === false ||
+          doctorProfile?.approvalStatus === "pending" ||
+          doctorProfile?.approvalStatus === "rejected"
+        )
+        ? "patient"
+        : roleBeforeAdmin;
     const currentUserId = String(req.currentUser?._id ?? req.user?._id ?? "");
-    let statusChange = { allowed: true, reason: null };
+    const isRootOwner = req.currentUser?.role === "root_owner";
+    let statusChange = {
+      allowed:
+        (isRootOwner && ["patient", "doctor", "admin"].includes(user.role)) ||
+        (!isRootOwner &&
+          ["patient", "doctor"].includes(user.role)),
+      reason:
+        user.role === "root_owner" || user.role === "super_admin"
+          ? "privileged_account"
+          : user.role === "admin" && !isRootOwner
+            ? "admin_account"
+            : null,
+    };
+    let roleChange = {
+      allowed:
+        isRootOwner &&
+        ["patient", "doctor", "admin"].includes(effectiveRole) &&
+        normalizedUser.accountStatus !== "suspended" &&
+        (effectiveRole !== "admin" || NORMAL_USER_ROLES.includes(savedRole)),
+      reason: !isRootOwner
+        ? "root_owner_only"
+        : effectiveRole === "root_owner" || effectiveRole === "super_admin"
+          ? "privileged_account"
+          : normalizedUser.accountStatus === "suspended"
+            ? "suspended_account"
+            : effectiveRole === "admin" && !NORMAL_USER_ROLES.includes(savedRole)
+              ? "saved_role_missing"
+          : null,
+      targetRole: null,
+    };
+
+    if (effectiveRole === "admin") {
+      roleChange.targetRole = NORMAL_USER_ROLES.includes(savedRole)
+        ? savedRole
+        : null;
+    } else if (NORMAL_USER_ROLES.includes(effectiveRole)) {
+      roleChange.targetRole = "admin";
+    }
 
     if (String(user._id) === currentUserId) {
       statusChange = { allowed: false, reason: "self" };
-    } else if (
-      user.role === "super_admin" &&
-      normalizedUser.accountStatus !== "suspended"
-    ) {
-      const activeSuperAdmins = await User.countDocuments({
-        role: "super_admin",
-        accountStatus: { $ne: "suspended" },
-      });
-      if (activeSuperAdmins <= 1) {
-        statusChange = { allowed: false, reason: "last_active_super_admin" };
-      }
+      roleChange = { ...roleChange, allowed: false, reason: "self" };
     }
 
     return res.status(200).json({
       data: {
         ...normalizedUser,
-        doctorProfile: doctorProfile ?? null,
+        role: effectiveRole,
+        doctorProfile: doctorProfile
+          ? {
+              ...doctorProfile,
+              approvalStatus: normalizeDoctorApproval(doctorProfile.approvalStatus),
+              isActive: doctorProfile.isActive !== false,
+            }
+          : null,
         activity: {
           appointmentsAsPatient,
           appointmentsAsDoctor,
@@ -1001,11 +1328,208 @@ async function handleGetAdminUser(req, res) {
           doctorConnections,
         },
         statusChange,
+        roleChange,
       },
     });
   } catch (err) {
     console.error("Admin user detail failed:", err.message);
     return res.status(500).json({ error: "Failed to load user details" });
+  }
+}
+
+async function handleUpdateUserRole(req, res) {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "Invalid user id", code: "INVALID_USER_ID" });
+  }
+
+  const body = req.body;
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(body, "role")
+  ) {
+    return res.status(400).json({ error: "Invalid request body", code: "INVALID_BODY" });
+  }
+
+  const { role } = body;
+  if (typeof role !== "string" || !ASSIGNABLE_USER_ROLES.includes(role)) {
+    return res.status(400).json({ error: "Invalid user role", code: "INVALID_USER_ROLE" });
+  }
+
+  const owner = crypto.randomUUID();
+  let locked = false;
+
+  try {
+    locked = await acquireStatusLock(owner);
+    if (!locked) {
+      res.set("Retry-After", "2");
+      return res.status(503).json({
+        error: "Another account update is in progress. Please try again.",
+        code: "ADMIN_ACTION_BUSY",
+      });
+    }
+
+    const actor = await User.findById(req.currentUser?._id ?? req.user?._id)
+      .select("_id role accountStatus tokenVersion")
+      .lean();
+    if (!actor || actor.role !== "root_owner") {
+      return res.status(403).json({
+        error: "Only the Root Owner can manage admin roles.",
+        code: "ROOT_OWNER_REQUIRED",
+      });
+    }
+    if (normalizeAccountStatus(actor.accountStatus) === "suspended") {
+      return res.status(403).json({
+        error: "This account has been suspended. Contact the Root Owner.",
+        code: "ACCOUNT_SUSPENDED",
+      });
+    }
+
+    const target = await User.findById(id)
+      .select("_id name email role accountStatus tokenVersion +roleBeforeAdmin +roleBeforeSuperAdmin")
+      .lean();
+    if (!target) {
+      return res.status(404).json({ error: "User not found", code: "USER_NOT_FOUND" });
+    }
+    if (String(target._id) === String(actor._id)) {
+      return res.status(403).json({
+        error: "The Root Owner cannot change their own role.",
+        code: "SELF_ROLE_CHANGE_FORBIDDEN",
+      });
+    }
+
+    const storedRole = target.role;
+    const hasInactiveDoctorPrivileges =
+      storedRole === "doctor" || target.roleBeforeAdmin === "doctor"
+        ? (await Doctor.findOne({ registeredBy: target.email })
+            .select("isActive approvalStatus")
+            .sort({ updatedAt: -1, _id: -1 })
+            .lean())
+        : false;
+    const doctorProfileBlocksRole = Boolean(
+      hasInactiveDoctorPrivileges &&
+      (
+        hasInactiveDoctorPrivileges.isActive === false ||
+        hasInactiveDoctorPrivileges.approvalStatus === "pending" ||
+        hasInactiveDoctorPrivileges.approvalStatus === "rejected"
+      )
+    );
+    const currentRole =
+      storedRole === "doctor" && doctorProfileBlocksRole ? "patient" : storedRole;
+    const savedRole =
+      target.roleBeforeAdmin === "doctor" && doctorProfileBlocksRole
+        ? "patient"
+        : target.roleBeforeAdmin;
+    if (currentRole === "root_owner") {
+      return res.status(403).json({
+        error: "The Root Owner role cannot be changed through dashboard APIs.",
+        code: "ROOT_OWNER_PROTECTED",
+      });
+    }
+    if (currentRole === "super_admin") {
+      return res.status(409).json({
+        error: "Legacy Super Admin accounts must be migrated through the explicit bootstrap process.",
+        code: "LEGACY_ROLE_REQUIRES_MIGRATION",
+      });
+    }
+    if (normalizeAccountStatus(target.accountStatus) === "suspended") {
+      return res.status(409).json({
+        error: "Reactivate this account before changing its role.",
+        code: "ACCOUNT_SUSPENDED",
+      });
+    }
+    if (currentRole === role) {
+      return res.status(200).json({
+        message: `Account already has the ${role} role`,
+        changed: false,
+        user: {
+          _id: target._id,
+          name: target.name,
+          email: target.email,
+          role: currentRole,
+        },
+      });
+    }
+
+    let nextRole;
+    let update;
+    if (NORMAL_USER_ROLES.includes(currentRole) && role === "admin") {
+      nextRole = "admin";
+      update = {
+        $set: { role: nextRole, roleBeforeAdmin: currentRole },
+        $unset: { roleBeforeSuperAdmin: 1 },
+        $inc: { tokenVersion: 1 },
+      };
+    } else if (currentRole === "admin" && NORMAL_USER_ROLES.includes(role)) {
+      if (!NORMAL_USER_ROLES.includes(savedRole)) {
+        return res.status(409).json({
+          error: "This Admin has no verified saved patient/doctor role. Repair it through the reviewed migration process.",
+          code: "ADMIN_ROLE_MISSING",
+        });
+      }
+      if (role !== savedRole) {
+        return res.status(409).json({
+          error: `This account must be restored to its saved ${savedRole} role.`,
+          code: "USER_ROLE_MISMATCH",
+          targetRole: savedRole,
+        });
+      }
+      nextRole = savedRole;
+      update = {
+        $set: { role: nextRole },
+        $unset: { roleBeforeAdmin: 1, roleBeforeSuperAdmin: 1 },
+        $inc: { tokenVersion: 1 },
+      };
+    } else {
+      return res.status(409).json({
+        error: "Only normal accounts can be promoted to Admin, and Admins can only be restored to their saved normal role.",
+        code: "ROLE_CHANGE_NOT_ALLOWED",
+      });
+    }
+
+    const updated = await User.findOneAndUpdate(
+      {
+        _id: target._id,
+        role: storedRole,
+        accountStatus: { $ne: "suspended" },
+      },
+      update,
+      { new: true, runValidators: true }
+    )
+      .select("_id name email role accountStatus updatedAt")
+      .lean();
+    if (!updated) {
+      return res.status(409).json({
+        error: "This account role changed while you were updating it. Please refresh.",
+        code: "USER_ROLE_CHANGED",
+      });
+    }
+
+    console.info(
+      `[admin-audit] action=user.change_role actor=${actor._id} target=${target._id} oldRole=${currentRole} newRole=${nextRole} at=${new Date().toISOString()}`
+    );
+
+    return res.status(200).json({
+      message:
+        nextRole === "admin"
+          ? "Admin access granted"
+          : `Admin access removed; ${nextRole} role restored`,
+      changed: true,
+      user: {
+        _id: updated._id,
+        name: updated.name,
+        email: updated.email,
+        role: updated.role,
+      },
+    });
+  } catch (err) {
+    console.error("Admin user role update failed:", err.message);
+    return res.status(500).json({ error: "Failed to update account role" });
+  } finally {
+    if (locked) await releaseStatusLock(owner);
   }
 }
 
@@ -1016,7 +1540,13 @@ async function handleUpdateUserStatus(req, res) {
   }
 
   const body = req.body;
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 1 ||
+    !Object.prototype.hasOwnProperty.call(body, "status")
+  ) {
     return res.status(400).json({ error: "Invalid request body", code: "INVALID_BODY" });
   }
 
@@ -1047,13 +1577,13 @@ async function handleUpdateUserStatus(req, res) {
       .select("_id role accountStatus")
       .lean();
 
-    if (!actor || actor.role !== "super_admin") {
+    if (!actor || !["root_owner", "admin"].includes(actor.role)) {
       return res.status(403).json({ error: "Forbidden", code: "FORBIDDEN" });
     }
 
     if (normalizeAccountStatus(actor.accountStatus) === "suspended") {
       return res.status(403).json({
-        error: "This account has been suspended. Please contact a Super Admin.",
+        error: "This account has been suspended. Contact the Root Owner.",
         code: "ACCOUNT_SUSPENDED",
       });
     }
@@ -1074,6 +1604,24 @@ async function handleUpdateUserStatus(req, res) {
     }
 
     const currentStatus = normalizeAccountStatus(target.accountStatus);
+    if (target.role === "root_owner") {
+      return res.status(403).json({
+        error: "The Root Owner account status cannot be changed through dashboard APIs.",
+        code: "ROOT_OWNER_PROTECTED",
+      });
+    }
+    if (target.role === "super_admin") {
+      return res.status(403).json({
+        error: "Legacy Super Admin accounts must be migrated through the explicit bootstrap process.",
+        code: "LEGACY_ROLE_REQUIRES_MIGRATION",
+      });
+    }
+    if (actor.role === "admin" && target.role === "admin") {
+      return res.status(403).json({
+        error: "Admins cannot change another Admin account's status.",
+        code: "PRIVILEGED_ACCOUNT_PROTECTED",
+      });
+    }
     const safeUser = {
       _id: target._id,
       name: target.name,
@@ -1090,29 +1638,15 @@ async function handleUpdateUserStatus(req, res) {
       });
     }
 
-    if (status === "suspended" && target.role === "super_admin") {
-      const activeSuperAdmins = await User.countDocuments({
-        role: "super_admin",
-        accountStatus: { $ne: "suspended" },
-      });
-
-      if (activeSuperAdmins <= 1) {
-        return res.status(409).json({
-          error: "The last active Super Admin cannot be suspended.",
-          code: "LAST_ACTIVE_SUPER_ADMIN",
-        });
-      }
-    }
-
     const filter =
       status === "suspended"
-        ? { _id: id, accountStatus: { $ne: "suspended" } }
-        : { _id: id, accountStatus: "suspended" };
+        ? { _id: id, role: target.role, accountStatus: { $ne: "suspended" } }
+        : { _id: id, role: target.role, accountStatus: "suspended" };
 
-    const update =
-      status === "suspended"
-        ? { $set: { accountStatus: "suspended" }, $inc: { tokenVersion: 1 } }
-        : { $set: { accountStatus: "active" } };
+    const update = {
+      $set: { accountStatus: status },
+      $inc: { tokenVersion: 1 },
+    };
 
     const updated = await User.findOneAndUpdate(filter, update, {
       new: true,
@@ -1156,6 +1690,8 @@ module.exports = {
   handleUpdateAppointmentStatus,
   handleGetAdminDoctor,
   handleUpdateDoctorApproval,
+  handleRemoveDoctor,
   handleGetAdminUser,
   handleUpdateUserStatus,
+  handleUpdateUserRole,
 };

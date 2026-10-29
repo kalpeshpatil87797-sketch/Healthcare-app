@@ -22,6 +22,35 @@ const appointmentSchema = new mongoose.Schema(
     // The patient's original appointmentDate/appointmentTime never change.
     alternateDate: { type: String },
     alternateTime: { type: String },
+    visitReason: { type: String, trim: true, maxlength: 500, default: "" },
+    history: [
+      {
+        event: {
+          type: String,
+          enum: [
+            "booked",
+            "cancelled",
+            "rescheduled",
+            "completed",
+            "accepted",
+            "rejected",
+            "alternate_suggested",
+          ],
+          required: true,
+        },
+        actorId: { type: mongoose.Schema.Types.ObjectId, ref: "user" },
+        actorRole: {
+          type: String,
+          enum: ["patient", "doctor", "admin", "root_owner", "system"],
+          default: "system",
+        },
+        fromDate: { type: String },
+        fromTime: { type: String },
+        toDate: { type: String },
+        toTime: { type: String },
+        occurredAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );

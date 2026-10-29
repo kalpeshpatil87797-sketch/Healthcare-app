@@ -286,6 +286,182 @@
   }
 }
 
+.smart-appointments {
+  margin-top: 30px;
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+}
+
+.smart-section-heading,
+.smart-appointment-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.smart-section-heading h2 {
+  margin: 4px 0 16px;
+}
+
+.smart-appointments h3 {
+  margin: 20px 0 10px;
+}
+
+.smart-appointment-card,
+.smart-availability,
+.smart-reschedule {
+  margin: 10px 0;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.smart-appointment-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.smart-appointment-heading > div span,
+.smart-appointment-card p,
+.smart-availability > p {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.smart-appointment-status {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #e6f3ef;
+  color: #176b5b;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.smart-status-cancelled,
+.smart-status-rejected {
+  background: #fff0ef;
+  color: #a63b34;
+}
+
+.smart-status-completed {
+  background: #edf1f8;
+  color: #526a91;
+}
+
+.smart-appointment-reason {
+  overflow-wrap: anywhere;
+}
+
+.smart-appointment-id {
+  font-size: 12px !important;
+}
+
+.smart-appointment-actions,
+.smart-inline-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.smart-appointments button,
+.smart-availability button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.smart-appointments button:disabled,
+.smart-availability button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.smart-appointment-error {
+  color: #a63b34 !important;
+}
+
+.smart-availability {
+  margin-top: 24px;
+}
+
+.smart-availability h2,
+.smart-availability h3 {
+  margin-top: 12px;
+}
+
+.smart-availability form,
+.smart-availability label,
+.smart-reschedule {
+  display: grid;
+  gap: 10px;
+}
+
+.smart-working-hours {
+  display: grid;
+  gap: 8px;
+}
+
+.smart-working-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(90px, 150px) auto minmax(90px, 150px);
+  align-items: center;
+  gap: 8px;
+}
+
+.smart-working-row > label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.smart-inline-form input,
+.smart-inline-form select,
+.smart-availability select,
+.smart-availability input,
+.smart-reschedule input,
+.smart-reschedule select {
+  min-height: 38px;
+  padding: 6px 9px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.smart-exception-list {
+  display: grid;
+  gap: 5px;
+  padding-left: 20px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.smart-exception-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+@media (max-width: 560px) {
+  .smart-appointments {
+    padding: 15px;
+  }
+
+  .smart-working-row {
+    grid-template-columns: minmax(90px, 1fr) minmax(85px, 1fr) auto minmax(85px, 1fr);
+  }
+}
+
 /* CARE HUB DASHBOARD */
 .care-dashboard.home-page {
   width: min(100%, 1280px);

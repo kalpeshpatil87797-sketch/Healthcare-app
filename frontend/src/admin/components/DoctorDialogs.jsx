@@ -27,7 +27,7 @@ const REVIEW_ERROR_COPY = {
   DOCTOR_NOT_FOUND: "This doctor profile no longer exists.",
   INVALID_APPROVAL_STATUS: "That approval decision is not valid.",
   ACCOUNT_SUSPENDED:
-    "Your admin account was suspended. Sign in with another Super Admin account.",
+    "Your admin account was suspended. Contact the Root Owner.",
 };
 
 const DETAIL_ERROR_COPY = {
@@ -171,7 +171,7 @@ export function DoctorDetailDialog({ doctorId, onClose, onReview }) {
               {data.registeredBy || "—"}
             </DetailField>
             <DetailField label="Applied">
-              {formatDate(data.createdAt)}
+              {formatDate(data.submittedAt || data.createdAt)}
             </DetailField>
             <DetailField label="Last updated">
               {formatDateTime(data.updatedAt) || "—"}

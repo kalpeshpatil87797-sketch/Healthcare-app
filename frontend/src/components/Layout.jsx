@@ -19,7 +19,14 @@ function Layout({ children }) {
         const res = await axios.get(`${API_BASE}/user/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (res.data?.role === "doctor") setRole("doctor");
+        const status = res.data?.doctorApprovalStatus;
+        setRole(
+          ["patient", "doctor"].includes(res.data?.role) &&
+            status === "approved" &&
+            res.data?.doctorProfileActive !== false
+            ? "doctor"
+            : "patient"
+        );
         if (res.data?.name) setUserName(res.data.name);
       } catch {
         // Patient defaults keep navigation fully usable.

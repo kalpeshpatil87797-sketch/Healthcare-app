@@ -57,7 +57,7 @@ export default function AdminDoctors() {
   const [approval, setApproval] = useState("");
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState("createdAt");
+  const [sort, setSort] = useState("submittedAt");
   const [order, setOrder] = useState("desc");
 
   const [detailDoctorId, setDetailDoctorId] = useState(null);
@@ -178,11 +178,11 @@ export default function AdminDoctors() {
       ),
     },
     {
-      key: "createdAt",
-      label: "Added",
+      key: "submittedAt",
+      label: "Submitted",
       sortable: true,
       hide: "tertiary",
-      render: (doctor) => formatDate(doctor.createdAt),
+      render: (doctor) => formatDate(doctor.submittedAt || doctor.createdAt),
     },
     {
       key: "actions",
@@ -337,7 +337,7 @@ export default function AdminDoctors() {
           </p>
         </div>
         <div className="admin-page-actions">
-          <span className="admin-ro-pill">Super Admin review</span>
+          <span className="admin-ro-pill">Admin review</span>
         </div>
       </header>
 

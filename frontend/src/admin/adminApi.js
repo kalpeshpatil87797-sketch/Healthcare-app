@@ -100,6 +100,14 @@ export function updateUserStatus(id, status, { signal } = {}) {
   });
 }
 
+export function updateUserRole(id, role, { signal } = {}) {
+  return request(`/admin/users/${id}/role`, {
+    method: "patch",
+    body: { role },
+    signal,
+  });
+}
+
 export function getAdminDoctors(params, { signal } = {}) {
   return request("/admin/doctors", { params, signal });
 }
@@ -127,6 +135,14 @@ export function updateDoctorApproval(id, status, reason, { signal } = {}) {
   return request(`/admin/doctors/${id}/approval`, {
     method: "patch",
     body,
+    signal,
+  });
+}
+
+export function removeDoctorProfile(id, { signal } = {}) {
+  return request(`/admin/doctors/${id}/remove`, {
+    method: "patch",
+    body: {},
     signal,
   });
 }

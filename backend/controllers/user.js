@@ -1,15 +1,51 @@
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const User = require("../models/user");
+const Doctor = require("../models/doctor");
 const sendEmail = require("../utils/sendEmail");
 
 const JWT_SECRET = process.env.JWT_SECRET;
+
+function getEffectiveRole(role, application) {
+  if (role !== "doctor") return role;
+  return application.doctorApprovalStatus === "approved" &&
+    application.doctorProfileActive !== false
+    ? "doctor"
+    : "patient";
+}
 
 function parseCoordinate(value, min, max) {
   if (value === undefined || value === null || value === "") return undefined;
   const num = Number(value);
   if (!Number.isFinite(num) || num < min || num > max) return null;
   return num;
+}
+
+async function getDoctorApplicationStatus(email, role) {
+  if (!["patient", "doctor"].includes(role)) {
+    return {
+      doctorApprovalStatus: null,
+      doctorProfileActive: null,
+      rejectionReason: null,
+      doctorApplicationSubmittedAt: null,
+    };
+  }
+
+  const doctor = await Doctor.findOne({ registeredBy: email })
+    .select("approvalStatus isActive rejectionReason submittedAt")
+    .sort({ updatedAt: -1, _id: -1 })
+    .lean();
+
+  return {
+    doctorApprovalStatus: doctor
+      ? doctor.approvalStatus ?? "approved"
+      : role === "doctor"
+        ? "approved"
+        : null,
+    doctorProfileActive: doctor ? doctor.isActive !== false : role === "doctor",
+    rejectionReason: doctor?.rejectionReason ?? null,
+    doctorApplicationSubmittedAt: doctor?.submittedAt ?? null,
+  };
 }
 
 async function handleUserSignup(req, res) {
@@ -45,10 +81,13 @@ async function handleUserLogin(req, res) {
 
   if (user.accountStatus === "suspended") {
     return res.status(403).json({
-      error: "This account has been suspended. Please contact a Super Admin.",
+      error: "This account has been suspended. Please contact the Root Owner.",
       code: "ACCOUNT_SUSPENDED",
     });
   }
+
+  const application = await getDoctorApplicationStatus(user.email, user.role);
+  const activeRole = getEffectiveRole(user.role, application);
 
   const token = jwt.sign(
     { _id: user._id, tv: user.tokenVersion ?? 0 },
@@ -59,8 +98,114 @@ async function handleUserLogin(req, res) {
   return res.status(200).json({
     message: "Login successful",
     token,
-    user: { _id: user._id, name: user.name, email: user.email, role: user.role },
+    user: {
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: activeRole,
+      ...application,
+    },
   });
+}
+
+async function handleLeaveDoctorRole(req, res) {
+  try {
+    const user = await User.findById(req.user._id)
+      .select("_id email role accountStatus tokenVersion")
+      .lean();
+    if (!user || user.role !== "doctor") {
+      return res.status(409).json({
+        error: "Only an active doctor account can leave doctor privileges.",
+        code: "DOCTOR_PROFILE_NOT_ACTIVE",
+      });
+    }
+    if (user.accountStatus === "suspended") {
+      return res.status(403).json({
+        error: "This account has been suspended. Please contact the Root Owner.",
+        code: "ACCOUNT_SUSPENDED",
+      });
+    }
+
+    const doctor = await Doctor.findOne({ registeredBy: user.email })
+      .sort({ updatedAt: -1, _id: -1 })
+      .lean();
+    if (
+      !doctor ||
+      doctor.isActive === false ||
+      (doctor.approvalStatus != null && doctor.approvalStatus !== "approved")
+    ) {
+      return res.status(409).json({
+        error: "Only an active, approved doctor profile can be deactivated.",
+        code: "DOCTOR_PROFILE_NOT_ACTIVE",
+      });
+    }
+
+    const deactivated = await Doctor.findOneAndUpdate(
+      {
+        _id: doctor._id,
+        isActive: { $ne: false },
+        $or: [
+          { approvalStatus: "approved" },
+          { approvalStatus: { $exists: false } },
+        ],
+      },
+      { $set: { isActive: false, isAvailable: false } },
+      { new: true, runValidators: true }
+    )
+      .select("_id")
+      .lean();
+
+    if (!deactivated) {
+      return res.status(409).json({
+        error: "The doctor profile changed before it could be deactivated. Refresh and try again.",
+        code: "DOCTOR_PROFILE_CHANGED",
+      });
+    }
+
+    const updatedUser = await User.findOneAndUpdate(
+      {
+        _id: user._id,
+        role: "doctor",
+        accountStatus: { $ne: "suspended" },
+      },
+      {
+        $set: { role: "patient" },
+        $inc: { tokenVersion: 1 },
+      },
+      { new: true, runValidators: true }
+    )
+      .select("_id tokenVersion")
+      .lean();
+
+    if (!updatedUser) {
+      console.warn(
+        `[user-audit] action=doctor.self_remove actor=${user._id} target=${doctor._id} profile=inactive account_state_changed at=${new Date().toISOString()}`
+      );
+      return res.status(409).json({
+        error: "Doctor access was disabled, but your account state changed. Sign in again to continue.",
+        code: "ACCOUNT_STATE_CHANGED",
+      });
+    }
+
+    const token = jwt.sign(
+      { _id: updatedUser._id, tv: updatedUser.tokenVersion ?? 0 },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    console.info(
+      `[user-audit] action=doctor.self_remove actor=${user._id} target=${doctor._id} approved->inactive role=doctor->patient at=${new Date().toISOString()}`
+    );
+
+    return res.status(200).json({
+      message: "Doctor privileges removed. You can continue using the app as a patient.",
+      token,
+      role: "patient",
+    });
+  } catch (err) {
+    console.error("Voluntary doctor removal failed:", err.message);
+    return res.status(500).json({ error: "Failed to remove doctor privileges" });
+  }
 }
 
 async function handleForgotPassword(req, res) {
@@ -118,6 +263,7 @@ async function handleResetPassword(req, res) {
 module.exports = {
   handleUserSignup,
   handleUserLogin,
+  handleLeaveDoctorRole,
   handleForgotPassword,
   handleResetPassword,
   handleGetProfile,
@@ -131,12 +277,21 @@ async function handleGetProfile(req, res) {
       .lean();
     if (!user) return res.status(404).json({ error: "User not found" });
     let speciality = null;
+    const application = await getDoctorApplicationStatus(user.email, user.role);
+    const activeRole = getEffectiveRole(user.role, application);
     if (user.role === "doctor") {
-      const Doctor = require("../models/doctor");
-      const doctor = await Doctor.findOne({ registeredBy: req.user.email }).select("specialist").lean();
+      const doctor = await Doctor.findOne({ registeredBy: req.user.email })
+        .select("specialist")
+        .sort({ updatedAt: -1, _id: -1 })
+        .lean();
       speciality = doctor?.specialist ?? null;
     }
-    return res.status(200).json({ ...user, speciality });
+    return res.status(200).json({
+      ...user,
+      role: activeRole,
+      speciality,
+      ...application,
+    });
   } catch (err) {
     return res.status(500).json({ error: "Failed to get profile" });
   }

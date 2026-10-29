@@ -7,6 +7,7 @@ const User = require("../models/user");
 const Connection = require("../models/connection");
 const Appointment = require("../models/appointment");
 const { getAIhealthResponse } = require("../utils/aiService");
+const { isApprovedDoctorProfile } = require("../utils/doctorApplicationStatus");
 const {
   MAX_IMAGE_SIZE,
   MAX_DOCUMENT_SIZE,
@@ -18,12 +19,21 @@ const {
 
 async function getRequesterRole(userEmail) {
   const user = await User.findOne({ email: userEmail }).select("role").lean();
-  return user?.role ?? "patient";
+  if (!user) return null;
+  if (user.role === "doctor") {
+    const application = await Doctor.findOne({ registeredBy: userEmail })
+      .select("approvalStatus isActive")
+      .sort({ updatedAt: -1, _id: -1 })
+      .lean();
+    if (application) return isDoctorApproved(application) ? "doctor" : "patient";
+    if (user.role === "doctor") return "doctor";
+  }
+  return user.role;
 }
 
 // Missing approvalStatus is legacy data and stays approved.
 function isDoctorApproved(doctor) {
-  return !["pending", "rejected"].includes(doctor?.approvalStatus);
+  return isApprovedDoctorProfile(doctor);
 }
 
 function isValidObjectId(value) {
@@ -91,7 +101,7 @@ async function withCurrentAppointmentStatus(messages) {
   if (appointmentIds.length === 0) return messages;
 
   const appointments = await Appointment.find({ _id: { $in: appointmentIds } })
-    .select("_id status alternateDate alternateTime")
+    .select("_id status appointmentDate appointmentTime alternateDate alternateTime visitReason")
     .lean();
   const appointmentsById = new Map(
     appointments.map((appointment) => [String(appointment._id), appointment])
@@ -104,8 +114,12 @@ async function withCurrentAppointmentStatus(messages) {
     return {
       ...(typeof message.toObject === "function" ? message.toObject() : message),
       appointmentStatus: appointment.status,
+      appointmentDate: appointment.appointmentDate,
+      appointmentTime: appointment.appointmentTime,
       alternateDate: appointment.alternateDate ?? null,
       alternateTime: appointment.alternateTime ?? null,
+      appointmentReason:
+        appointment.visitReason ?? message.appointmentReason ?? null,
     };
   });
 }
@@ -173,7 +187,7 @@ async function handleSendMessage(req, res) {
         return res.status(400).json({ error: "Invalid doctor id" });
       }
       const doctor = await Doctor.findById(doctorId)
-        .select("_id registeredBy approvalStatus isAvailable")
+        .select("_id registeredBy approvalStatus isActive isAvailable")
         .lean();
       if (!doctor) {
         if (req.file) fs.unlinkSync(req.file.path);
@@ -342,7 +356,7 @@ async function handleGetMessages(req, res) {
           return res.status(400).json({ error: "Invalid patient id" });
         }
         const ownDoctor = await Doctor.findOne({ _id: req.query.doctorId, registeredBy: req.user.email })
-          .select("_id approvalStatus")
+          .select("_id approvalStatus isActive")
           .lean();
         if (!ownDoctor) {
           return res.status(403).json({ error: "Not authorized for this doctor conversation" });
@@ -366,6 +380,21 @@ async function handleGetMessages(req, res) {
       }
       if (role !== "patient") {
         return res.status(403).json({ error: "Only patients and doctors can access doctor messages." });
+      }
+      const doctor = await Doctor.findById(req.query.doctorId)
+        .select("_id approvalStatus isActive isAvailable registeredBy")
+        .lean();
+      if (!doctor) {
+        return res.status(404).json({ error: "Doctor not found" });
+      }
+      if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
+        return res.status(403).json({ error: "This doctor is not currently available." });
+      }
+      if (doctor.registeredBy) {
+        const doctorUser = await User.findOne({ email: doctor.registeredBy }).select("accountStatus").lean();
+        if (doctorUser?.accountStatus === "suspended") {
+          return res.status(403).json({ error: "This doctor is currently unavailable." });
+        }
       }
       const patientConnection = await Connection.findOne({ patientId: req.user._id, doctorId: req.query.doctorId }).lean();
       if (!patientConnection) {

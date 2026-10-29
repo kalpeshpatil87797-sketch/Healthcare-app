@@ -5,6 +5,8 @@ const {
   handleDoctorAppointments,
   handleRespondAppointment,
   handleCancelAppointment,
+  handleRescheduleAppointment,
+  handleCompleteAppointment,
   handleAcceptAlternate,
 } = require("../controllers/appointment");
 const { restrictToLoggedinUserOnly } = require("../middlewares/auth");
@@ -16,6 +18,8 @@ router.get("/mine", restrictToLoggedinUserOnly, handleMyAppointments);
 router.get("/doctor", restrictToLoggedinUserOnly, handleDoctorAppointments);
 router.patch("/:id/respond", restrictToLoggedinUserOnly, handleRespondAppointment);
 router.patch("/:id/cancel", restrictToLoggedinUserOnly, handleCancelAppointment);
+router.patch("/:id/reschedule", restrictToLoggedinUserOnly, handleRescheduleAppointment);
+router.patch("/:id/complete", restrictToLoggedinUserOnly, handleCompleteAppointment);
 router.patch("/:id/accept-alternate", restrictToLoggedinUserOnly, handleAcceptAlternate);
 
 module.exports = router;

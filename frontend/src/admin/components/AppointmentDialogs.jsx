@@ -22,7 +22,7 @@ const STATUS_ERROR_COPY = {
   INVALID_APPOINTMENT_ID: "That appointment reference is not valid.",
   APPOINTMENT_NOT_FOUND: "This appointment no longer exists.",
   ACCOUNT_SUSPENDED:
-    "Your admin account was suspended. Sign in with another Super Admin account.",
+    "Your admin account was suspended. Contact the Root Owner.",
 };
 
 function statusErrorMessage(error) {
@@ -171,10 +171,39 @@ export function AppointmentDetailDialog({ appointment, onClose, onChangeStatus }
             <DetailField label="Alternate time">
               {hasAlternate ? appointment?.alternateTime || "—" : "—"}
             </DetailField>
+            <DetailField label="Reason for visit">
+              {appointment?.visitReason || "Not provided"}
+            </DetailField>
             <DetailField label="Last updated">
               {formatDateTime(appointment?.updatedAt) || "—"}
             </DetailField>
           </dl>
+        </section>
+
+        <section className="admin-detail-section" aria-label="Appointment history">
+          <h4>History</h4>
+          {appointment?.history?.length ? (
+            <ul className="admin-appointment-history">
+              {appointment.history.map((entry, index) => (
+                <li key={`${entry.event}-${entry.occurredAt || index}`}>
+                  <strong>{entry.event.replace(/_/g, " ")}</strong>
+                  {entry.fromDate ? (
+                    <span>
+                      {" "}from {formatCalendarDate(entry.fromDate)} at {entry.fromTime}
+                    </span>
+                  ) : null}
+                  {entry.toDate ? (
+                    <span>
+                      {" "}to {formatCalendarDate(entry.toDate)} at {entry.toTime}
+                    </span>
+                  ) : null}
+                  {entry.occurredAt ? (
+                    <span> · {formatDateTime(entry.occurredAt)}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : <p>No recorded appointment changes.</p>}
         </section>
 
         <section className="admin-detail-section" aria-label="Patient details">

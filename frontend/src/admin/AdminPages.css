@@ -51,6 +51,31 @@
   line-height: 1.55;
 }
 
+.admin-role-management {
+  display: flex;
+  align-items: flex-start;
+  padding: 16px 18px;
+  border: 1px solid var(--admin-border);
+  border-left: 4px solid var(--admin-teal);
+  border-radius: 10px;
+  background: var(--admin-surface);
+}
+
+.admin-role-management h2 {
+  margin: 0;
+  color: var(--admin-text);
+  font-family: "Manrope", "DM Sans", sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.admin-role-management p:last-child {
+  margin: 5px 0 0;
+  color: var(--admin-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .admin-page-actions {
   display: flex;
   flex-wrap: wrap;
@@ -632,6 +657,18 @@
   color: #0b5d57;
 }
 
+.admin-badge-role-admin {
+  border-color: #b2ddff;
+  background: #eff8ff;
+  color: #175cd3;
+}
+
+.admin-badge-role-root-owner {
+  border-color: #fedf89;
+  background: #fffaeb;
+  color: #93370d;
+}
+
 .admin-badge-role-super-admin {
   border-color: #d5e0ec;
   background: #eaf0f7;
@@ -853,6 +890,12 @@
 }
 
 .admin-badge-approval-rejected {
+  border-color: var(--admin-danger-border);
+  background: var(--admin-danger-bg);
+  color: var(--admin-danger);
+}
+
+.admin-badge-profile-removed {
   border-color: var(--admin-danger-border);
   background: var(--admin-danger-bg);
   color: var(--admin-danger);

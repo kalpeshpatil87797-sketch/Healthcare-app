@@ -33,18 +33,20 @@ export default function AdminTopbar({
           ☰
         </button>
         <div className="admin-topbar-heading">
-          <p className="admin-topbar-eyebrow">Super Admin</p>
+          <p className="admin-topbar-eyebrow">Healthcare admin</p>
           <span className="admin-topbar-title">{title}</span>
         </div>
       </div>
 
       <div className="admin-topbar-right">
-        <span className="admin-role-pill">Super Admin</span>
+        <span className="admin-role-pill">
+          {adminUser?.role === "root_owner" ? "Root Owner" : "Admin"}
+        </span>
         <span className="admin-avatar admin-avatar-sm" aria-hidden="true">
           {getInitials(adminUser?.name)}
         </span>
         <span className="admin-topbar-name">
-          {adminUser?.name || "Super Admin"}
+          {adminUser?.name || "Administrator"}
         </span>
         <button
           type="button"
