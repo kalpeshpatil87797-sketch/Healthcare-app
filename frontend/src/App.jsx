@@ -8,6 +8,7 @@ import Look from "./pages/Look";
 import Medicine from "./pages/Medicine";
 import ImDoctor from "./pages/ImDoctor";
 import NearbyDoctors from "./pages/NearbyDoctors";
+import DoctorAppointments from "./pages/DoctorAppointments";
 import Profile from "./pages/Profile";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
@@ -34,6 +35,7 @@ function App() {
         <Route path="/medicine" element={<ProtectedRoute><Medicine /></ProtectedRoute>} />
         <Route path="/im-doctor" element={<ProtectedRoute><ImDoctor /></ProtectedRoute>} />
         <Route path="/nearby-doctors" element={<ProtectedRoute><NearbyDoctors /></ProtectedRoute>} />
+        <Route path="/doctor/appointments" element={<ProtectedRoute><DoctorAppointments /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminRoute />}>
           <Route element={<AdminLayout />}>

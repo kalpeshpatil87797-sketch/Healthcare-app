@@ -1,6 +1,7 @@
 const express = require("express");
 const {
   handleBookAppointment,
+  handleAppointmentAvailability,
   handleMyAppointments,
   handleDoctorAppointments,
   handleRespondAppointment,
@@ -12,6 +13,7 @@ const { restrictToLoggedinUserOnly } = require("../middlewares/auth");
 const router = express.Router();
 
 router.post("/book", restrictToLoggedinUserOnly, handleBookAppointment);
+router.get("/availability", restrictToLoggedinUserOnly, handleAppointmentAvailability);
 router.get("/mine", restrictToLoggedinUserOnly, handleMyAppointments);
 router.get("/doctor", restrictToLoggedinUserOnly, handleDoctorAppointments);
 router.patch("/:id/respond", restrictToLoggedinUserOnly, handleRespondAppointment);

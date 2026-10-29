@@ -2,6 +2,8 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const User = require("../models/user");
 const sendEmail = require("../utils/sendEmail");
+const Doctor = require("../models/doctor");
+const { isDoctorApproved } = require("../utils/doctorAccess");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -130,13 +132,24 @@ async function handleGetProfile(req, res) {
       .select("_id name email role age phone address location accountStatus createdAt updatedAt")
       .lean();
     if (!user) return res.status(404).json({ error: "User not found" });
-    let speciality = null;
-    if (user.role === "doctor") {
-      const Doctor = require("../models/doctor");
-      const doctor = await Doctor.findOne({ registeredBy: req.user.email }).select("specialist").lean();
-      speciality = doctor?.specialist ?? null;
-    }
-    return res.status(200).json({ ...user, speciality });
+    const doctor = user.role === "doctor"
+      ? await Doctor.findOne({ registeredBy: req.user.email })
+        .select("specialist approvalStatus isAvailable")
+        .lean()
+      : null;
+    const doctorApproved = isDoctorApproved(doctor);
+    const accountActive = user.accountStatus !== "suspended";
+    const effectiveRole =
+      user.role === "doctor" && (!doctorApproved || !accountActive)
+        ? "patient"
+        : user.role;
+    return res.status(200).json({
+      ...user,
+      effectiveRole,
+      doctorApprovalStatus: doctor?.approvalStatus ?? (doctor ? "approved" : null),
+      doctorAvailability: doctor?.isAvailable ?? false,
+      speciality: doctor?.specialist ?? null,
+    });
   } catch (err) {
     return res.status(500).json({ error: "Failed to get profile" });
   }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
-import { MORNING_SLOTS, AFTERNOON_SLOTS } from "./AppointmentModal";
+import { MORNING_SLOTS, AFTERNOON_SLOTS } from "../utils/appointmentSlots";
 import "../pages/Chat.css";
 
 const API_BASE = "http://localhost:8001";

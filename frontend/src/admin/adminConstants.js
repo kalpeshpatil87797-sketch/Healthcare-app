@@ -1,8 +1,15 @@
 export const SUPER_ADMIN_ROLE = "super_admin";
+export const ROOT_OWNER_ROLE = "root_owner";
+
+export function getAdminRoleLabel(role) {
+  return role === ROOT_OWNER_ROLE ? "Root Owner" : "Super Admin";
+}
 
 export const ROLE_LABELS = {
   patient: "Patient",
   doctor: "Doctor",
+  admin: "Admin",
+  root_owner: "Root Owner",
   super_admin: "Super admin",
 };
 
@@ -10,6 +17,8 @@ export const USER_ROLE_OPTIONS = [
   { value: "", label: "All roles" },
   { value: "patient", label: "Patients" },
   { value: "doctor", label: "Doctors" },
+  { value: "admin", label: "Admins" },
+  { value: "root_owner", label: "Root Owners" },
   { value: "super_admin", label: "Super admins" },
 ];
 

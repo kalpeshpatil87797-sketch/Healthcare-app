@@ -15,16 +15,10 @@ const {
   ALLOWED_IMAGE_EXTS,
   ALLOWED_DOCUMENT_EXTS,
 } = require("../middlewares/upload");
-
-async function getRequesterRole(userEmail) {
-  const user = await User.findOne({ email: userEmail }).select("role").lean();
-  return user?.role ?? "patient";
-}
-
-// Missing approvalStatus is legacy data and stays approved.
-function isDoctorApproved(doctor) {
-  return !["pending", "rejected"].includes(doctor?.approvalStatus);
-}
+const {
+  getEffectiveRole: getRequesterRole,
+  isDoctorApproved,
+} = require("../utils/doctorAccess");
 
 function isValidObjectId(value) {
   return typeof value === "string" && mongoose.Types.ObjectId.isValid(value);
@@ -199,7 +193,7 @@ async function handleSendMessage(req, res) {
           if (req.file) fs.unlinkSync(req.file.path);
           return res.status(403).json({ error: "Not authorized for this doctor conversation" });
         }
-        if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
+        if (!isDoctorApproved(doctor) || doctor.isAvailable !== true) {
           if (req.file) fs.unlinkSync(req.file.path);
           return res.status(403).json({ error: "Your doctor profile is not approved for messaging." });
         }

@@ -9,7 +9,11 @@ const userSchema = new mongoose.Schema(
     age: { type: Number, required: true },
     phone: { type: String, required: true },
     address: { type: String, required: true },
-    role: { type: String, enum: ["patient", "doctor", "super_admin"], default: "patient" },
+    role: {
+      type: String,
+      enum: ["patient", "doctor", "admin", "root_owner", "super_admin"],
+      default: "patient",
+    },
     accountStatus: {
       type: String,
       enum: ["active", "suspended"],

@@ -2,6 +2,13 @@ const mongoose = require("mongoose");
 const Doctor = require("../models/doctor");
 const User = require("../models/user");
 const Connection = require("../models/connection");
+const {
+  getEffectiveRole,
+  getAuthorizedDoctor,
+  isDoctorApproved,
+  canSubmitDoctorApplication,
+  DOCTOR_APPLICATION_ROLES,
+} = require("../utils/doctorAccess");
 
 const SPECIALTIES = [
   "General Physician",
@@ -20,13 +27,6 @@ const SPECIALTIES = [
   "Urologist",
   "Endocrinologist",
 ];
-
-// Missing approvalStatus is legacy data and stays approved.
-const APPROVED_DOCTOR_FILTER = { approvalStatus: { $nin: ["pending", "rejected"] } };
-
-function isDoctorApproved(doctor) {
-  return !["pending", "rejected"].includes(doctor?.approvalStatus);
-}
 
 function resolveSpecialty(value) {
   if (value === undefined || value === null || String(value).trim() === "") return undefined;
@@ -50,6 +50,10 @@ async function handleDoctorRegistration(req, res) {
   const specialistValue = specialist ?? specialistType;
 
   try {
+    if (!canSubmitDoctorApplication(req.user.role)) {
+      return res.status(403).json({ error: "This account cannot apply for doctor privileges." });
+    }
+
     const lat = parseCoordinate(latitude, -90, 90);
     const lng = parseCoordinate(longitude, -180, 180);
     if (lat === null || lng === null) {
@@ -72,7 +76,13 @@ async function handleDoctorRegistration(req, res) {
       location,
     });
 
-    await User.updateOne({ email: req.user.email }, { $set: { role: "doctor" } });
+    await User.updateOne(
+      {
+        email: req.user.email,
+        role: { $in: DOCTOR_APPLICATION_ROLES },
+      },
+      { $set: { role: "doctor" } }
+    );
 
     return res.status(201).json({
       message: "Doctor registration submitted. A Super Admin must approve it before your profile is visible.",
@@ -106,7 +116,15 @@ async function handleNearbyDoctors(req, res) {
       return res.status(400).json({ error: "Invalid specialty" });
     }
 
-    const matchQuery = { isAvailable: true, ...APPROVED_DOCTOR_FILTER };
+    const activeDoctors = await User.find({
+      role: "doctor",
+      accountStatus: { $ne: "suspended" },
+    }).select("email").lean();
+    const matchQuery = {
+      isAvailable: true,
+      approvalStatus: { $in: ["approved", null] },
+      registeredBy: { $in: activeDoctors.map((user) => user.email) },
+    };
     if (specialty !== undefined) {
       matchQuery.specialist = { $regex: `^${escapeRegExp(specialty)}$`, $options: "i" };
     }
@@ -156,16 +174,86 @@ async function handleNearbyDoctors(req, res) {
   }
 }
 
-module.exports = { handleDoctorRegistration, handleNearbyDoctors, handleConnect, handleMyPatients, handleMyDoctors, SPECIALTIES };
+async function handleSearchDoctors(req, res) {
+  try {
+    const specialty = resolveSpecialty(req.query.specialty);
+    if (specialty === null) {
+      return res.status(400).json({ error: "Invalid specialty" });
+    }
+
+    const location =
+      typeof req.query.location === "string" ? req.query.location.trim().slice(0, 100) : "";
+    const activeDoctors = await User.find({
+      role: "doctor",
+      accountStatus: { $ne: "suspended" },
+    }).select("email").lean();
+    const query = {
+      isAvailable: true,
+      approvalStatus: { $in: ["approved", null] },
+      registeredBy: { $in: activeDoctors.map((user) => user.email) },
+    };
+    if (specialty !== undefined) {
+      query.specialist = { $regex: `^${escapeRegExp(specialty)}$`, $options: "i" };
+    }
+    if (location) {
+      query.clinicLocation = { $regex: escapeRegExp(location), $options: "i" };
+    }
+
+    const doctors = await Doctor.find(query)
+      .select("_id name clinicName degree specialist clinicLocation isAvailable")
+      .sort({ name: 1 })
+      .limit(50)
+      .lean();
+    return res.status(200).json({ count: doctors.length, doctors });
+  } catch (err) {
+    console.error("Search doctors failed:", err.message);
+    return res.status(500).json({ error: "Failed to search doctors" });
+  }
+}
+
+async function handleUpdateAvailability(req, res) {
+  try {
+    if (typeof req.body?.isAvailable !== "boolean") {
+      return res.status(400).json({ error: "isAvailable must be a boolean" });
+    }
+    const doctor = await getAuthorizedDoctor(req.user.email);
+    if (!doctor) {
+      return res.status(403).json({ error: "Only approved doctors can manage availability" });
+    }
+
+    const updated = await Doctor.findOneAndUpdate(
+      { _id: doctor._id, registeredBy: req.user.email },
+      { $set: { isAvailable: req.body.isAvailable } },
+      { new: true, runValidators: true }
+    ).select("_id isAvailable").lean();
+    if (!updated) {
+      return res.status(404).json({ error: "Doctor profile not found" });
+    }
+    return res.status(200).json({ isAvailable: updated.isAvailable });
+  } catch (err) {
+    console.error("Update doctor availability failed:", err.message);
+    return res.status(500).json({ error: "Failed to update doctor availability" });
+  }
+}
+
+module.exports = {
+  handleDoctorRegistration,
+  handleNearbyDoctors,
+  handleSearchDoctors,
+  handleUpdateAvailability,
+  handleConnect,
+  handleMyPatients,
+  handleMyDoctors,
+  SPECIALTIES,
+};
 
 async function getOwnDoctor(userEmail) {
-  return Doctor.findOne({ registeredBy: userEmail }).lean();
+  return getAuthorizedDoctor(userEmail);
 }
 
 async function handleConnect(req, res) {
   try {
-    const user = await User.findOne({ email: req.user.email }).select("role").lean();
-    if (!user || user.role !== "patient") {
+    if ((await getEffectiveRole(req.user.email)) !== "patient") {
       return res.status(403).json({ error: "Only patients can connect with doctors" });
     }
 
@@ -183,15 +271,19 @@ async function handleConnect(req, res) {
       return res.status(404).json({ error: "Doctor not found" });
     }
     // Only approved doctors can receive new connections.
-    if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
+    if (!isDoctorApproved(doctor) || doctor.isAvailable !== true) {
       return res.status(403).json({ error: "This doctor is not currently available." });
     }
     // A suspended doctor must not receive new connections.
     if (doctor.registeredBy) {
-      const doctorUser = await User.findOne({ email: doctor.registeredBy })
-        .select("accountStatus")
+      const doctorUser = await User.findOne({
+        email: doctor.registeredBy,
+        role: "doctor",
+        accountStatus: { $ne: "suspended" },
+      })
+        .select("_id")
         .lean();
-      if (doctorUser?.accountStatus === "suspended") {
+      if (!doctorUser) {
         return res.status(403).json({ error: "This doctor is currently unavailable." });
       }
     }
@@ -208,13 +300,9 @@ async function handleConnect(req, res) {
 
 async function handleMyPatients(req, res) {
   try {
-    const user = await User.findOne({ email: req.user.email }).select("_id role").lean();
-    if (!user || user.role !== "doctor") {
-      return res.status(403).json({ error: "Only doctors can access patient connections" });
-    }
     const doctor = await getOwnDoctor(req.user.email);
     if (!doctor) {
-      return res.status(404).json({ error: "Doctor profile not found" });
+      return res.status(403).json({ error: "Only doctors can access patient connections" });
     }
     const connections = await Connection.find({ doctorId: doctor._id })
       .populate("patientId", "name age")
@@ -237,8 +325,7 @@ async function handleMyPatients(req, res) {
 
 async function handleMyDoctors(req, res) {
   try {
-    const user = await User.findOne({ email: req.user.email }).select("role").lean();
-    if (!user || user.role !== "patient") {
+    if ((await getEffectiveRole(req.user.email)) !== "patient") {
       return res.status(403).json({ error: "Only patients can access doctor connections" });
     }
 

@@ -6,6 +6,7 @@ const Appointment = require("../models/appointment");
 const Connection = require("../models/connection");
 const AdminActionLock = require("../models/adminActionLock");
 const { syncAppointmentMessage } = require("./appointment");
+const { canAccessAdminDashboard } = require("../utils/adminAccess");
 const {
   acquireAppointmentSlotLock,
   releaseAppointmentSlotLock,
@@ -1047,7 +1048,7 @@ async function handleUpdateUserStatus(req, res) {
       .select("_id role accountStatus")
       .lean();
 
-    if (!actor || actor.role !== "super_admin") {
+    if (!actor || !canAccessAdminDashboard(actor.role)) {
       return res.status(403).json({ error: "Forbidden", code: "FORBIDDEN" });
     }
 

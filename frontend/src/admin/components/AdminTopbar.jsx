@@ -1,4 +1,5 @@
 import { useLocation } from "react-router-dom";
+import { getAdminRoleLabel } from "../adminConstants";
 import { getInitials } from "../format";
 
 const PAGE_TITLES = {
@@ -17,6 +18,7 @@ export default function AdminTopbar({
 }) {
   const location = useLocation();
   const title = PAGE_TITLES[location.pathname] ?? "Admin console";
+  const roleLabel = getAdminRoleLabel(adminUser?.role);
 
   return (
     <header className="admin-topbar">
@@ -33,13 +35,13 @@ export default function AdminTopbar({
           ☰
         </button>
         <div className="admin-topbar-heading">
-          <p className="admin-topbar-eyebrow">Super Admin</p>
+          <p className="admin-topbar-eyebrow">{roleLabel}</p>
           <span className="admin-topbar-title">{title}</span>
         </div>
       </div>
 
       <div className="admin-topbar-right">
-        <span className="admin-role-pill">Super Admin</span>
+        <span className="admin-role-pill">{roleLabel}</span>
         <span className="admin-avatar admin-avatar-sm" aria-hidden="true">
           {getInitials(adminUser?.name)}
         </span>
