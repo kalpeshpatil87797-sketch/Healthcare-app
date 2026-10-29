@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { getAdminDoctor } from "../adminApi";
+import { useEffect, useState } from "react";
+import { getAdminDoctor, updateClinicLocationVerification } from "../adminApi";
 import {
   DOCTOR_APPROVAL_LABELS,
   DOCTOR_REJECTION_REASON_MAX,
@@ -83,12 +83,60 @@ function ActivityCount({ label, value }) {
   );
 }
 
-export function DoctorDetailDialog({ doctorId, onClose, onReview }) {
-  const { data, error, isLoading, retry } = useAdminRequest(fetchDoctorDetail, {
+export function DoctorDetailDialog({ doctorId, onClose, onReview, onLocationUpdated }) {
+  const { data, error, isLoading, isRefreshing, retry, refresh } = useAdminRequest(fetchDoctorDetail, {
     id: doctorId,
   });
+  const [locationVerificationBusy, setLocationVerificationBusy] = useState(false);
+  const [locationVerificationError, setLocationVerificationError] = useState("");
+  const [locationVerificationNotice, setLocationVerificationNotice] = useState("");
+  const [locationVerifiedOverride, setLocationVerifiedOverride] = useState(null);
 
   const canReview = data?.approval?.canReview === true;
+  const locationVerified =
+    locationVerifiedOverride ?? data?.locationVerified === true;
+  const hasValidCoordinates =
+    Number.isFinite(data?.latitude) &&
+    data.latitude >= -90 &&
+    data.latitude <= 90 &&
+    Number.isFinite(data?.longitude) &&
+    data.longitude >= -180 &&
+    data.longitude <= 180;
+
+  useEffect(() => {
+    const refreshVisibleDetail = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refreshVisibleDetail);
+    document.addEventListener("visibilitychange", refreshVisibleDetail);
+    return () => {
+      window.removeEventListener("focus", refreshVisibleDetail);
+      document.removeEventListener("visibilitychange", refreshVisibleDetail);
+    };
+  }, [refresh]);
+
+  async function toggleLocationVerification() {
+    if (!data || locationVerificationBusy) return;
+    setLocationVerificationBusy(true);
+    setLocationVerificationError("");
+    setLocationVerificationNotice("");
+    try {
+      const response = await updateClinicLocationVerification(
+        data._id,
+        !locationVerified
+      );
+      setLocationVerificationNotice(response.message);
+      setLocationVerifiedOverride(response.doctor.locationVerified === true);
+      refresh();
+      onLocationUpdated?.();
+    } catch (requestError) {
+      setLocationVerificationError(
+        requestError.message || "Clinic location verification could not be updated."
+      );
+    } finally {
+      setLocationVerificationBusy(false);
+    }
+  }
 
   return (
     <AdminDialog
@@ -143,6 +191,16 @@ export function DoctorDetailDialog({ doctorId, onClose, onReview }) {
         </div>
       ) : data ? (
         <div className="admin-detail">
+          <div className="admin-detail-refresh">
+            <button
+              type="button"
+              className="admin-btn admin-btn-secondary"
+              onClick={refresh}
+              disabled={isRefreshing}
+            >
+              {isRefreshing ? "Refreshing…" : "Refresh doctor details"}
+            </button>
+          </div>
           <div className="admin-detail-summary">
             <span className="admin-detail-avatar" aria-hidden="true">
               {getInitials(data.name)}
@@ -166,6 +224,12 @@ export function DoctorDetailDialog({ doctorId, onClose, onReview }) {
             </DetailField>
             <DetailField label="Clinic location">
               {data.clinicLocation || "—"}
+            </DetailField>
+            <DetailField label="Clinic latitude">
+              {data.latitude ?? "Not saved"}
+            </DetailField>
+            <DetailField label="Clinic longitude">
+              {data.longitude ?? "Not saved"}
             </DetailField>
             <DetailField label="Registered email">
               {data.registeredBy || "—"}
@@ -192,6 +256,43 @@ export function DoctorDetailDialog({ doctorId, onClose, onReview }) {
               )}
             </DetailField>
           </dl>
+
+          <section className="admin-detail-section" aria-label="Clinic location verification">
+            <h4>Clinic location verification</h4>
+            <p className="admin-detail-hint">
+              {locationVerified
+                ? "This saved clinic location is verified and may be shown as a map pin."
+                : "This location is unverified and must not be shown as a map pin."}
+            </p>
+            {locationVerificationNotice ? (
+              <p role="status" className="admin-detail-hint">{locationVerificationNotice}</p>
+            ) : null}
+            {locationVerificationError ? (
+              <p role="alert" className="admin-dialog-error">{locationVerificationError}</p>
+            ) : null}
+            <button
+              type="button"
+              className={locationVerified
+                ? "admin-btn admin-btn-secondary"
+                : "admin-btn admin-btn-primary"}
+              onClick={toggleLocationVerification}
+              disabled={
+                locationVerificationBusy ||
+                (!locationVerified && !hasValidCoordinates)
+              }
+            >
+              {locationVerificationBusy
+                ? "Saving…"
+                : locationVerified
+                  ? "Revoke location verification"
+                  : "Verify clinic location"}
+            </button>
+            {!locationVerified && !hasValidCoordinates ? (
+              <p className="admin-detail-hint">
+                Verification is unavailable until valid clinic coordinates are saved.
+              </p>
+            ) : null}
+          </section>
 
           {data.approvalStatus === "rejected" && data.rejectionReason ? (
             <div className="admin-detail-reason" role="note">

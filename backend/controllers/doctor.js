@@ -12,6 +12,7 @@ const {
   isApprovedDoctorProfile,
   isBlockingDoctorApplication,
 } = require("../utils/doctorApplicationStatus");
+const { getPublicClinicLocation } = require("../utils/clinicLocationVerification");
 
 const SPECIALTIES = [
   "General Physician",
@@ -134,6 +135,7 @@ async function handleDoctorRegistration(req, res) {
         clinicLocation,
         registeredBy: user.email,
         isAvailable: isAvailable ?? true,
+        locationVerified: false,
         approvalStatus: "pending",
         submittedAt,
       };
@@ -214,14 +216,24 @@ async function handleNearbyDoctors(req, res) {
     if (specialty === null) {
       return res.status(400).json({ error: "Invalid specialty" });
     }
+    const name =
+      typeof req.query.name === "string" ? req.query.name.trim().slice(0, 100) : "";
 
+    const activeDoctors = await User.find({
+      role: "doctor",
+      accountStatus: { $ne: "suspended" },
+    }).select("email").lean();
     const matchQuery = {
       isAvailable: true,
       isActive: { $ne: false },
+      registeredBy: { $in: activeDoctors.map((user) => user.email) },
       ...APPROVED_DOCTOR_FILTER,
     };
     if (specialty !== undefined) {
       matchQuery.specialist = { $regex: `^${escapeRegExp(specialty)}$`, $options: "i" };
+    }
+    if (name) {
+      matchQuery.name = { $regex: escapeRegExp(name), $options: "i" };
     }
 
     const doctors = await Doctor.aggregate([
@@ -244,7 +256,10 @@ async function handleNearbyDoctors(req, res) {
           specialist: 1,
           clinicLocation: 1,
           isAvailable: 1,
+          isActive: 1,
+          approvalStatus: 1,
           location: 1,
+          locationVerified: 1,
           distKm: 1,
         },
       },
@@ -257,10 +272,14 @@ async function handleNearbyDoctors(req, res) {
       clinicName: d.clinicName,
       degree: d.degree,
       clinicLocation: d.clinicLocation,
+      approvalStatus: d.approvalStatus ?? "approved",
+      isActive: d.isActive !== false,
       isAvailable: d.isAvailable,
-      latitude: d.location?.coordinates?.[1],
-      longitude: d.location?.coordinates?.[0],
-      distanceKm: d.distKm !== undefined ? Math.round(d.distKm * 10) / 10 : undefined,
+      ...getPublicClinicLocation(d.locationVerified, d.location),
+      distanceKm:
+        d.locationVerified === true && d.distKm !== undefined
+          ? Math.round(d.distKm * 10) / 10
+          : undefined,
     }));
 
     return res.status(200).json({ count: result.length, radiusKm: safeRadiusKm, specialty, doctors: result });
@@ -278,6 +297,8 @@ async function handleSearchDoctors(req, res) {
 
     const location =
       typeof req.query.location === "string" ? req.query.location.trim().slice(0, 100) : "";
+    const name =
+      typeof req.query.name === "string" ? req.query.name.trim().slice(0, 100) : "";
     const activeDoctors = await User.find({
       role: "doctor",
       accountStatus: { $ne: "suspended" },
@@ -294,13 +315,28 @@ async function handleSearchDoctors(req, res) {
     if (location) {
       query.clinicLocation = { $regex: escapeRegExp(location), $options: "i" };
     }
+    if (name) {
+      query.name = { $regex: escapeRegExp(name), $options: "i" };
+    }
 
     const doctors = await Doctor.find(query)
-      .select("_id name clinicName degree specialist clinicLocation isAvailable")
+      .select("_id name clinicName degree specialist clinicLocation isAvailable isActive approvalStatus location locationVerified")
       .sort({ name: 1 })
       .limit(50)
       .lean();
-    return res.status(200).json({ count: doctors.length, doctors });
+    const results = doctors.map((doctor) => ({
+      _id: doctor._id,
+      name: doctor.name,
+      clinicName: doctor.clinicName,
+      degree: doctor.degree,
+      specialist: doctor.specialist,
+      clinicLocation: doctor.clinicLocation,
+      approvalStatus: doctor.approvalStatus ?? "approved",
+      isActive: doctor.isActive !== false,
+      isAvailable: doctor.isAvailable,
+      ...getPublicClinicLocation(doctor.locationVerified, doctor.location),
+    }));
+    return res.status(200).json({ count: results.length, doctors: results });
   } catch (err) {
     console.error("Search doctors failed:", err.message);
     return res.status(500).json({ error: "Failed to search doctors" });

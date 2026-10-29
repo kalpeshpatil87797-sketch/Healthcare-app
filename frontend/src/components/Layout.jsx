@@ -19,14 +19,19 @@ function Layout({ children }) {
         const res = await axios.get(`${API_BASE}/user/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        const reportedRole = res.data?.effectiveRole ?? res.data?.role;
         const status = res.data?.doctorApprovalStatus;
-        setRole(
-          ["patient", "doctor"].includes(res.data?.role) &&
-            status === "approved" &&
-            res.data?.doctorProfileActive !== false
-            ? "doctor"
-            : "patient"
-        );
+        if (["admin", "root_owner", "super_admin"].includes(reportedRole)) {
+          setRole(reportedRole);
+        } else if (["patient", "doctor"].includes(reportedRole)) {
+          setRole(
+            reportedRole === "doctor" &&
+              status === "approved" &&
+              res.data?.doctorProfileActive !== false
+              ? "doctor"
+              : "patient"
+          );
+        }
         if (res.data?.name) setUserName(res.data.name);
       } catch {
         // Keep only role-neutral navigation until the current role is known.

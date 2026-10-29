@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getAdminDoctors, updateDoctorApproval } from "../adminApi";
 import {
   AVAILABILITY_OPTIONS,
@@ -91,6 +91,18 @@ export default function AdminDoctors() {
   const { data, meta, error, isLoading, isRefreshing, retry, refresh } =
     useAdminRequest(getAdminDoctors, params);
 
+  useEffect(() => {
+    const handlePageFocus = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", handlePageFocus);
+    document.addEventListener("visibilitychange", handlePageFocus);
+    return () => {
+      window.removeEventListener("focus", handlePageFocus);
+      document.removeEventListener("visibilitychange", handlePageFocus);
+    };
+  }, [refresh]);
+
   const hasActiveFilters =
     searchInput.trim() !== "" ||
     specialty !== "" ||
@@ -152,8 +164,12 @@ export default function AdminDoctors() {
             {doctor.clinicLocation || "—"}
           </span>
           {doctor.latitude != null && doctor.longitude != null ? (
-            <span className="admin-cell-sub">Map pin saved</span>
-          ) : null}
+            <span className="admin-cell-sub">
+              {doctor.locationVerified ? "Clinic location verified" : "Clinic location unverified"}
+            </span>
+          ) : (
+            <span className="admin-cell-sub">No coordinates saved</span>
+          )}
         </div>
       ),
     },
@@ -338,6 +354,14 @@ export default function AdminDoctors() {
         </div>
         <div className="admin-page-actions">
           <span className="admin-ro-pill">Admin review</span>
+          <button
+            type="button"
+            className="admin-btn admin-btn-secondary"
+            onClick={refresh}
+            disabled={isLoading || isRefreshing}
+          >
+            {isRefreshing ? "Refreshing…" : "Refresh"}
+          </button>
         </div>
       </header>
 
@@ -453,13 +477,22 @@ export default function AdminDoctors() {
         </div>
       </div>
 
-      {error ? (
+      {error && !data ? (
         <AdminErrorState
           error={error}
           onRetry={retry}
           onResetFilters={hasActiveFilters ? clearFilters : undefined}
         />
       ) : (
+        <>
+        {error ? (
+          <div className="admin-inline-error" role="alert">
+            <span>Refresh failed. Showing the last loaded data; try again.</span>
+            <button type="button" className="admin-btn admin-btn-secondary" onClick={refresh} disabled={isRefreshing}>
+              {isRefreshing ? "Refreshing…" : "Retry refresh"}
+            </button>
+          </div>
+        ) : null}
         <div className="admin-card admin-table-card">
           <div
             className={`admin-table-scroll${
@@ -568,6 +601,7 @@ export default function AdminDoctors() {
             />
           ) : null}
         </div>
+        </>
       )}
 
       {detailDoctorId && !review ? (
@@ -575,6 +609,7 @@ export default function AdminDoctors() {
           doctorId={detailDoctorId}
           onClose={() => setDetailDoctorId(null)}
           onReview={openReview}
+          onLocationUpdated={refresh}
         />
       ) : null}
 

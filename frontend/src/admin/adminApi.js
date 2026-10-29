@@ -128,6 +128,14 @@ export function getAdminDoctor(id, { signal } = {}) {
   return request(`/admin/doctors/${id}`, { signal });
 }
 
+export function updateClinicLocationVerification(id, isVerified, { signal } = {}) {
+  return request(`/admin/doctors/${id}/location-verification`, {
+    method: "patch",
+    body: { isVerified },
+    signal,
+  });
+}
+
 export function updateDoctorApproval(id, status, reason, { signal } = {}) {
   const body = { status };
   if (status === "rejected") body.reason = reason;

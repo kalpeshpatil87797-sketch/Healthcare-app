@@ -28,6 +28,7 @@ const doctorSchema = new mongoose.Schema(
     registeredBy: { type: String, required: true },
     isActive: { type: Boolean, default: true },
     isAvailable: { type: Boolean, default: true },
+    locationVerified: { type: Boolean, default: false },
     availability: {
       slotDurationMinutes: { type: Number, min: 15, max: 120, default: 30 },
       workingHours: { type: [weeklyTimeRangeSchema], default: [] },

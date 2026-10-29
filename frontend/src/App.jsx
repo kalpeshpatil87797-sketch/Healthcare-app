@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
@@ -20,6 +20,18 @@ import AdminOverview from "./admin/pages/AdminOverview";
 import AdminUsers from "./admin/pages/AdminUsers";
 import AdminDoctors from "./admin/pages/AdminDoctors";
 import AdminAppointments from "./admin/pages/AdminAppointments";
+
+function NotFound() {
+  return (
+    <main className="auth-wrapper">
+      <section className="auth-card" aria-labelledby="not-found-title">
+        <h1 id="not-found-title">Page not found</h1>
+        <p>The page you requested does not exist.</p>
+        <Link to="/">Return to home</Link>
+      </section>
+    </main>
+  );
+}
 
 function App() {
   return (
@@ -48,6 +60,7 @@ function App() {
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </Route>
         </Route>
+        <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
   );

@@ -16,6 +16,8 @@ const ALLOWED_DOCUMENT_EXTS = [".pdf"];
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024; // 10 MB
+const REPORT_MIME_TYPES = ["image/jpeg", "image/png", "application/pdf"];
+const REPORT_EXTS = [".jpg", ".jpeg", ".png", ".pdf"];
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadDir),
@@ -49,6 +51,25 @@ const upload = multer({
   },
 });
 
+const reportUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (!REPORT_MIME_TYPES.includes(file.mimetype) || !REPORT_EXTS.includes(ext)) {
+      const err = new Error("Upload a JPG, PNG, or PDF medical report.");
+      err.code = "UNSUPPORTED_FILE_TYPE";
+      return cb(err, false);
+    }
+    cb(null, true);
+  },
+  limits: {
+    fileSize: MAX_DOCUMENT_SIZE,
+    files: 1,
+    fields: 1,
+    fieldSize: 4000,
+  },
+});
+
 module.exports = upload;
 module.exports.MAX_IMAGE_SIZE = MAX_IMAGE_SIZE;
 module.exports.MAX_DOCUMENT_SIZE = MAX_DOCUMENT_SIZE;
@@ -56,3 +77,4 @@ module.exports.ALLOWED_IMAGE_TYPES = ALLOWED_IMAGE_TYPES;
 module.exports.ALLOWED_DOCUMENT_TYPES = ALLOWED_DOCUMENT_TYPES;
 module.exports.ALLOWED_IMAGE_EXTS = ALLOWED_IMAGE_EXTS;
 module.exports.ALLOWED_DOCUMENT_EXTS = ALLOWED_DOCUMENT_EXTS;
+module.exports.reportUpload = reportUpload;

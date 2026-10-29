@@ -16,6 +16,12 @@ const DOCTOR_LINKS = [
   { to: "/medicine", label: "Medicines", icon: "💊" },
 ];
 
+const ADMIN_LINKS = [
+  { to: "/dashboard", label: "Home", icon: "🏠" },
+  { to: "/admin", label: "Admin Dashboard", icon: "⚙" },
+  { to: "/profile", label: "Profile", icon: "👤" },
+];
+
 const ACCOUNT_LINKS = [
   { to: "/dashboard", label: "Home", icon: "🏠" },
   { to: "/profile", label: "Profile", icon: "👤" },
@@ -24,12 +30,6 @@ const ACCOUNT_LINKS = [
 const ROOT_OWNER_LINKS = [
   { to: "/dashboard", label: "Home", icon: "🏠" },
   { to: "/admin", label: "Root Owner Dashboard", icon: "⚙" },
-  { to: "/profile", label: "Profile", icon: "👤" },
-];
-
-const SUPER_ADMIN_LINKS = [
-  { to: "/dashboard", label: "Home", icon: "🏠" },
-  { to: "/admin", label: "Admin Dashboard", icon: "⚙" },
   { to: "/profile", label: "Profile", icon: "👤" },
 ];
 
@@ -42,9 +42,9 @@ function Navbar({ onMenuClick, sidebarOpen, role, userName }) {
         ? PATIENT_LINKS
         : role === "root_owner"
           ? ROOT_OWNER_LINKS
-          : role === "super_admin"
-            ? SUPER_ADMIN_LINKS
-          : ACCOUNT_LINKS;
+            : role === "admin"
+              ? ADMIN_LINKS
+            : ACCOUNT_LINKS;
   const initial = (userName || "").trim().charAt(0).toUpperCase();
 
   function goToProfile() {

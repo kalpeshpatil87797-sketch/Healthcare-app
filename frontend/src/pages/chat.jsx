@@ -19,6 +19,20 @@ const CHAT_IMAGE_ACCEPT = "image/jpeg,image/png,image/webp";
 const CHAT_DOC_ACCEPT = "application/pdf,.pdf";
 const CHAT_MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5 MB
 const CHAT_MAX_DOC_SIZE = 10 * 1024 * 1024; // 10 MB
+const AI_REPORT_IMAGE_ACCEPT = "image/jpeg,image/png,.jpg,.jpeg,.png";
+const AI_REPORT_PDF_ACCEPT = "application/pdf,.pdf";
+
+function validateAiReport(file) {
+  const extension = String(file?.name || "").toLowerCase().split(".").pop();
+  const image = ["image/jpeg", "image/png"].includes(file?.type) &&
+    ["jpg", "jpeg", "png"].includes(extension);
+  const pdf = file?.type === "application/pdf" && extension === "pdf";
+  if (!image && !pdf) return "Choose a JPG, PNG, or PDF medical report.";
+  if (file.size > (image ? CHAT_MAX_IMAGE_SIZE : CHAT_MAX_DOC_SIZE)) {
+    return image ? "Images must be 5 MB or smaller." : "PDF files must be 10 MB or smaller.";
+  }
+  return "";
+}
 
 function chatFileKind(file) {
   if (!file) return null;
@@ -617,13 +631,17 @@ function Chat() {
       const res = await axios.get(`${API_BASE}/user/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
+      const reportedRole = res.data?.effectiveRole ?? res.data?.role;
       const approvalStatus = res.data?.doctorApprovalStatus;
-      const userRole =
-        ["patient", "doctor"].includes(res.data?.role) &&
-          approvalStatus === "approved" &&
-          res.data?.doctorProfileActive !== false
-          ? "doctor"
-          : "patient";
+      const userRole = ["admin", "root_owner", "super_admin"].includes(reportedRole)
+        ? reportedRole
+        : reportedRole === "doctor"
+          ? approvalStatus === "approved" && res.data?.doctorProfileActive !== false
+            ? "doctor"
+            : "patient"
+          : reportedRole === "patient"
+            ? "patient"
+            : "unknown";
       setRole(userRole);
       if (userRole === "doctor") {
         fetchMyPatients();
@@ -667,7 +685,14 @@ function Chat() {
 
   function handleFileSelect(e) {
     const file = e.target.files[0];
+    e.target.value = "";
     if (file) {
+      const problem = validateAiReport(file);
+      if (problem) {
+        setUploadError(problem);
+        setShowAttachMenu(false);
+        return;
+      }
       setSelectedFile(file);
       setUploadError("");
     }
@@ -1072,7 +1097,8 @@ function Chat() {
 
     setIsSending(true);
     try {
-      const res = await axios.post(`${API_BASE}/message/send`, formData, {
+      const endpoint = selectedFile ? "/message/analyze" : "/message/send";
+      const res = await axios.post(`${API_BASE}${endpoint}`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -1080,6 +1106,7 @@ function Chat() {
       });
       setText("");
       setSelectedFile(null);
+      setShowAttachMenu(false);
       setUploadError(res.data.aiError || "");
       if (photoInputRef.current) photoInputRef.current.value = "";
       if (documentInputRef.current) documentInputRef.current.value = "";
@@ -1163,15 +1190,26 @@ function Chat() {
                         ) : (
                           msg.text && <p>{msg.text}</p>
                         )}
-                        {msg.fileType === "image" && <img src={`${API_BASE}${msg.fileUrl}`} alt={msg.fileName} />}
-                        {msg.fileType === "document" && (
+                        {msg.fileType === "image" && msg.fileUrl && <img src={`${API_BASE}${msg.fileUrl}`} alt={msg.fileName} />}
+                        {msg.fileType === "document" && msg.fileUrl && (
                           <a href={`${API_BASE}${msg.fileUrl}`} target="_blank" rel="noreferrer" className="document-link">
                             📄 {msg.fileName}
                           </a>
                         )}
+                        {msg.fileName && !msg.fileUrl && (
+                          <div className="msg-doc-card ai-report-metadata">
+                            <span className="msg-doc-icon" aria-hidden="true">
+                              {msg.fileType === "image" ? "🖼️" : "📄"}
+                            </span>
+                            <span className="msg-doc-info">
+                              <span className="msg-doc-name">{msg.fileName}</span>
+                              <span className="msg-doc-size">Sent privately for AI analysis</span>
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
-                    {isSending && text.trim() && (
+                    {isSending && (text.trim() || selectedFile) && (
                       <div className="chat-bubble ai-bubble ai-msg ai-thinking">
                         <span className="sender-label">🩺 AI Assistant</span>
                         <p>
@@ -1180,7 +1218,7 @@ function Chat() {
                             <span></span>
                             <span></span>
                           </span>{" "}
-                          AI Assistant is thinking...
+                          {selectedFile ? "Reviewing your report..." : "AI Assistant is thinking..."}
                         </p>
                       </div>
                     )}
@@ -1202,8 +1240,8 @@ function Chat() {
                           <div className="attach-option" onClick={() => documentInputRef.current.click()}>📄 Document</div>
                         </div>
                       )}
-                      <input type="file" accept="image/*" ref={photoInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
-                      <input type="file" accept=".pdf,.doc,.docx,.txt" ref={documentInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
+                      <input type="file" accept={AI_REPORT_IMAGE_ACCEPT} ref={photoInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
+                      <input type="file" accept={AI_REPORT_PDF_ACCEPT} ref={documentInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
                     </div>
                     <input type="text" ref={aiInputRef} className="chat-input" placeholder="Describe your symptoms..." value={text} onChange={(e) => setText(e.target.value)} disabled={isSending} />
                     <button type="submit" className="send-btn" disabled={isSending}>{isSending ? "Sending..." : "Send"}</button>

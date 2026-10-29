@@ -278,6 +278,279 @@
   font-weight: 600;
 }
 
+.profile-edit-card {
+  margin-top: 22px;
+  padding: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.profile-edit-card > h2 {
+  margin: 0 0 18px;
+  font-size: 19px;
+}
+
+.profile-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.profile-edit-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.profile-edit-grid input,
+.profile-edit-grid textarea {
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.profile-edit-grid textarea {
+  resize: vertical;
+}
+
+.profile-edit-grid input:focus-visible,
+.profile-edit-grid textarea:focus-visible {
+  outline: 3px solid var(--color-primary-soft-border);
+  outline-offset: 1px;
+}
+
+.profile-edit-wide {
+  grid-column: 1 / -1;
+}
+
+.profile-edit-grid h3 {
+  margin: 8px 0 0;
+  font-size: 16px;
+}
+
+.profile-clinic-location {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.profile-clinic-location p {
+  margin: 0;
+}
+
+.profile-address-geocode,
+.profile-resolved-location {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+
+.profile-address-geocode > p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.profile-resolved-location {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.profile-resolved-location > span {
+  color: var(--color-text-secondary);
+}
+
+.clinic-picker-backdrop {
+  position: fixed;
+  z-index: 1400;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgb(15 23 42 / 62%);
+}
+
+.clinic-picker-dialog {
+  display: grid;
+  gap: 12px;
+  width: min(920px, 100%);
+  max-height: min(92vh, 900px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg);
+}
+
+.clinic-picker-header,
+.clinic-picker-footer,
+.clinic-picker-search > div,
+.clinic-picker-footer > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.clinic-picker-header h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 20px;
+}
+
+.clinic-picker-header p,
+.clinic-picker-search p,
+.clinic-picker-toolbar p,
+.clinic-picker-instructions,
+.clinic-picker-attribution {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.clinic-picker-search {
+  display: grid;
+  gap: 7px;
+}
+
+.clinic-picker-search label {
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
+.clinic-picker-search input {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--tap-min);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.clinic-picker-result {
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+  padding: 11px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.clinic-picker-result > span,
+.clinic-picker-toolbar > span,
+.clinic-picker-footer > span,
+.clinic-picker-selected > span {
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.clinic-picker-error {
+  margin: 0;
+  color: var(--color-danger, #b42318);
+  font-size: var(--text-sm);
+}
+
+.clinic-picker-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.clinic-picker-toolbar p {
+  flex-basis: 100%;
+}
+
+.clinic-picker-map {
+  width: 100%;
+  height: min(48vh, 460px);
+  min-height: 270px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: #e7edf0;
+}
+
+.clinic-location-picker-pin {
+  background: transparent;
+  border: 0;
+}
+
+.clinic-location-picker-pin svg {
+  width: 36px;
+  height: 44px;
+  overflow: visible;
+  filter: drop-shadow(0 2px 3px rgb(15 23 42 / 38%));
+}
+
+.clinic-location-picker-pin svg path:first-child {
+  fill: #b42318;
+}
+
+.clinic-location-picker-pin svg circle {
+  fill: white;
+}
+
+.clinic-location-picker-pin svg path:last-child {
+  fill: #b42318;
+}
+
+.clinic-picker-instructions {
+  margin: 0;
+}
+
+.clinic-picker-footer {
+  flex-wrap: wrap;
+}
+
+.clinic-picker-selected {
+  display: grid;
+  gap: 4px;
+}
+
+.clinic-picker-selected strong {
+  color: var(--color-text);
+  font-size: var(--text-xs);
+}
+
+.clinic-picker-attribution {
+  text-align: right;
+}
+
+.profile-edit-notice {
+  margin: 0;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft-bg);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.profile-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
 .booking-page {
   max-width: 960px;
 }
@@ -413,6 +686,141 @@
 
 .appointment-doctor-card .provider-result-details {
   flex: 1;
+}
+
+.doctor-view-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.doctor-view-toolbar p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.doctor-view-toolbar [role="group"] {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.doctor-view-toolbar .is-selected {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.doctor-map-section {
+  position: relative;
+  margin-top: 14px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+
+.doctor-map-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+}
+
+.doctor-map-legend-pin,
+.doctor-map-legend-pin svg {
+  display: block;
+  width: 18px;
+  height: 22px;
+}
+
+.doctor-map-legend-pin path:first-child {
+  fill: var(--color-primary, #187b78);
+}
+
+.doctor-map-legend-pin circle {
+  fill: #fff;
+}
+
+.doctor-map-legend-pin path:last-child {
+  fill: var(--color-primary, #187b78);
+}
+
+.doctor-map {
+  width: 100%;
+  height: min(62vh, 560px);
+  min-height: 340px;
+}
+
+.doctor-map-message {
+  margin: 0;
+  padding: 11px 14px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.doctor-map-error {
+  color: var(--color-error);
+}
+
+.doctor-clinic-marker {
+  border: 0;
+  background: transparent;
+}
+
+.doctor-clinic-pin-art {
+  display: block;
+  width: 36px;
+  height: 44px;
+  overflow: visible;
+  filter: drop-shadow(0 2px 2px rgb(15 23 42 / 28%));
+  transition: transform 140ms ease, filter 140ms ease;
+  transform-origin: 50% 95%;
+}
+
+.doctor-clinic-pin-shadow {
+  fill: var(--color-primary, #187b78);
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+
+.doctor-clinic-pin-center {
+  fill: #fff;
+}
+
+.doctor-clinic-pin-cross {
+  fill: var(--color-primary, #187b78);
+}
+
+.doctor-clinic-marker:hover .doctor-clinic-pin-art,
+.doctor-clinic-marker:focus-visible .doctor-clinic-pin-art,
+.doctor-clinic-marker.is-selected .doctor-clinic-pin-art {
+  filter: drop-shadow(0 3px 4px rgb(15 23 42 / 38%));
+  transform: scale(1.12);
+}
+
+.doctor-clinic-marker:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.doctor-map-popup {
+  display: grid;
+  gap: 5px;
+  min-width: 180px;
+}
+
+.doctor-map-popup .provider-primary-button {
+  margin-top: 5px;
+  padding: 8px 10px;
+  font-size: 12px;
 }
 
 .appointment-book-button {
@@ -592,6 +1000,40 @@
 }
 
 @media (max-width: 600px) {
+  .clinic-picker-backdrop {
+    padding: 0;
+  }
+
+  .clinic-picker-dialog {
+    width: 100%;
+    max-height: 100dvh;
+    min-height: 100dvh;
+    border-radius: 0;
+    padding: 14px;
+  }
+
+  .clinic-picker-header,
+  .clinic-picker-search > div,
+  .clinic-picker-footer,
+  .clinic-picker-footer > div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .clinic-picker-search > div > button,
+  .clinic-picker-footer > div > button {
+    width: 100%;
+  }
+
+  .clinic-picker-map {
+    height: 42vh;
+    min-height: 240px;
+  }
+
+  .clinic-picker-attribution {
+    text-align: left;
+  }
+
   .provider-page {
     min-height: calc(100vh - 60px);
     padding-top: 25px;
@@ -608,6 +1050,14 @@
 
   .profile-details {
     grid-template-columns: 1fr;
+  }
+
+  .profile-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-edit-wide {
+    grid-column: auto;
   }
 
   .profile-appearance {
@@ -634,6 +1084,15 @@
   }
 
   .appointment-doctor-card {
+    align-items: flex-start;
+  }
+
+  .doctor-map {
+    height: 55vh;
+    min-height: 300px;
+  }
+
+  .doctor-view-toolbar {
     align-items: flex-start;
   }
 

@@ -1,6 +1,10 @@
 const express = require("express");
 const multer = require("multer");
-const { handleSendMessage, handleGetMessages } = require("../controllers/message");
+const {
+  handleSendMessage,
+  handleAnalyzeReport,
+  handleGetMessages,
+} = require("../controllers/message");
 const { restrictToLoggedinUserOnly } = require("../middlewares/auth");
 const upload = require("../middlewares/upload");
 
@@ -23,7 +27,27 @@ function handleUpload(req, res, next) {
   });
 }
 
+function handleReportUpload(req, res, next) {
+  upload.reportUpload.single("file")(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({ error: "Report file must be 10 MB or smaller." });
+      }
+      return res.status(400).json({ error: "Report upload failed. Please try again." });
+    }
+    if (err) {
+      return res.status(400).json({
+        error: err.code === "UNSUPPORTED_FILE_TYPE"
+          ? err.message
+          : "Report upload failed. Please try again.",
+      });
+    }
+    next();
+  });
+}
+
 router.post("/send", restrictToLoggedinUserOnly, handleUpload, handleSendMessage);
+router.post("/analyze", restrictToLoggedinUserOnly, handleReportUpload, handleAnalyzeReport);
 router.get("/all", restrictToLoggedinUserOnly, handleGetMessages);
 
 module.exports = router;

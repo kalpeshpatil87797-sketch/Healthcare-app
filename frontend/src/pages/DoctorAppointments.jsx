@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import Layout from "../components/Layout";
 import { AvailabilitySettings } from "../components/AppointmentDashboard";
@@ -25,38 +25,62 @@ function DoctorAppointments() {
   const [availabilityDraft, setAvailabilityDraft] = useState(false);
   const [availabilityEditorOpen, setAvailabilityEditorOpen] = useState(false);
   const [availabilityNotice, setAvailabilityNotice] = useState("");
+  const [availabilityRefreshKey, setAvailabilityRefreshKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [updatingAvailability, setUpdatingAvailability] = useState(false);
   const [actingAppointmentId, setActingAppointmentId] = useState("");
   const [alternateAppointmentId, setAlternateAppointmentId] = useState("");
   const [error, setError] = useState("");
   const [accessDenied, setAccessDenied] = useState(false);
+  const loadingRef = useRef(false);
+  const refreshPageRef = useRef(null);
+
+  function fetchDoctorWorkspace() {
+    return Promise.all([
+      axios.get(`${API_BASE}/user/me`, authConfig()),
+      axios.get(`${API_BASE}/appointment/doctor`, authConfig()),
+    ]);
+  }
 
   async function loadAppointments() {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     setError("");
     try {
-      const response = await axios.get(`${API_BASE}/appointment/doctor`, authConfig());
+      const [profile, response] = await fetchDoctorWorkspace();
+      if (profile.data?.effectiveRole !== "doctor") {
+        setAccessDenied(true);
+        setError("Appointment management is available only to approved, active doctors.");
+        setAppointments([]);
+        return;
+      }
+      setIsAvailable(profile.data?.doctorAvailability === true);
+      setAvailabilityDraft(profile.data?.doctorAvailability === true);
       setAppointments(response.data?.appointments ?? []);
+      setAvailabilityRefreshKey((current) => current + 1);
       setAccessDenied(false);
     } catch (err) {
-      setAppointments([]);
       setAccessDenied(err.response?.status === 403);
+      if (err.response?.status === 403) setAppointments([]);
       setError(
         err.response?.data?.error ??
           "Could not load appointments. Please try again."
       );
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }
 
   useEffect(() => {
+    refreshPageRef.current = loadAppointments;
+  });
+
+  useEffect(() => {
     let active = true;
-    Promise.all([
-      axios.get(`${API_BASE}/user/me`, authConfig()),
-      axios.get(`${API_BASE}/appointment/doctor`, authConfig()),
-    ])
+    loadingRef.current = true;
+    fetchDoctorWorkspace()
       .then(([profile, response]) => {
         if (!active) return;
         if (profile.data?.effectiveRole !== "doctor") {
@@ -68,20 +92,32 @@ function DoctorAppointments() {
         setIsAvailable(profile.data?.doctorAvailability === true);
         setAvailabilityDraft(profile.data?.doctorAvailability === true);
         setAppointments(response.data?.appointments ?? []);
+        setAvailabilityRefreshKey((current) => current + 1);
+        setAccessDenied(false);
       })
       .catch((err) => {
         if (!active) return;
         setAccessDenied(err.response?.status === 403);
-        setError(
-          err.response?.data?.error ??
-            "Could not load your doctor appointments."
-        );
+        setError(err.response?.data?.error ?? "Could not load your doctor appointments.");
       })
       .finally(() => {
+        loadingRef.current = false;
         if (active) setLoading(false);
       });
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshVisiblePage = () => {
+      if (document.visibilityState === "visible") refreshPageRef.current?.();
+    };
+    window.addEventListener("focus", refreshVisiblePage);
+    document.addEventListener("visibilitychange", refreshVisiblePage);
+    return () => {
+      window.removeEventListener("focus", refreshVisiblePage);
+      document.removeEventListener("visibilitychange", refreshVisiblePage);
     };
   }, []);
 
@@ -284,7 +320,10 @@ function DoctorAppointments() {
                     </button>
                   </div>
                 </form>
-                <AvailabilitySettings onUpdated={loadAppointments} />
+                <AvailabilitySettings
+                  onUpdated={loadAppointments}
+                  refreshKey={availabilityRefreshKey}
+                />
                 <p className="doctor-availability-help">
                   Changes to your working hours and exceptions update future bookable slots.
                   Existing appointments are preserved.

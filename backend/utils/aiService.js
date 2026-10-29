@@ -35,15 +35,40 @@ If the message is health-related (symptoms, illness, body concern), return the r
 
 If the message is not health-related, do not use the structure above. Just answer normally in a brief, helpful tone.`;
 
+const REPORT_ANALYSIS_PROMPT = `When the user attaches a medical report, explain its contents in plain language as educational information, not a diagnosis. Summarize only findings that are legible in the supplied report. Do not infer, guess, or invent values, units, reference ranges, or results that are unreadable or absent; explicitly state when any part is unclear or cannot be interpreted. Preserve the report's stated units and reference ranges exactly when readable, and note that ranges may vary by laboratory. Do not prescribe medicines or treatment. Encourage the user to discuss the report with a licensed clinician, and advise urgent care only for clearly urgent symptoms or findings.`;
+
 // Primary model first; fallbacks tried in order on 503/overload/timeout.
 // gemini-3.5-flash-lite verified healthy via REST for this API key;
 // gemini-3.6-flash (previous default) currently returns 503 / hangs.
 const MODELS = ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.6-flash"];
 const TIMEOUT_MS = 45000;
 
-async function callModelRest(apiKey, model, userMessage) {
+function buildUserParts(userMessage, attachment) {
+  const parts = [];
+  if (typeof userMessage === "string" && userMessage.trim()) {
+    parts.push({ text: userMessage.trim() });
+  }
+  if (attachment) {
+    if (!Buffer.isBuffer(attachment.buffer) ||
+      !["image/jpeg", "image/png", "application/pdf"].includes(attachment.mimeType)) {
+      throw new Error("Invalid medical report attachment");
+    }
+    parts.push({
+      inline_data: {
+        mime_type: attachment.mimeType,
+        data: attachment.buffer.toString("base64"),
+      },
+    });
+  }
+  return parts;
+}
+
+async function callModelRest(apiKey, model, userMessage, attachment) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const reportPrompt = attachment
+    ? `\n\n${REPORT_ANALYSIS_PROMPT}`
+    : "";
   try {
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
@@ -51,8 +76,8 @@ async function callModelRest(apiKey, model, userMessage) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ parts: [{ text: userMessage }] }],
+          system_instruction: { parts: [{ text: `${SYSTEM_PROMPT}${reportPrompt}` }] },
+          contents: [{ parts: buildUserParts(userMessage, attachment) }],
         }),
         signal: controller.signal,
       }
@@ -82,7 +107,7 @@ async function callModelRest(apiKey, model, userMessage) {
   }
 }
 
-async function getAIhealthResponse(userMessage) {
+async function getAIhealthResponse(userMessage, attachment = null) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
 
   if (!apiKey) {
@@ -92,7 +117,7 @@ async function getAIhealthResponse(userMessage) {
   let lastError = null;
   for (const model of MODELS) {
     try {
-      return await callModelRest(apiKey, model, userMessage);
+      return await callModelRest(apiKey, model, userMessage, attachment);
     } catch (err) {
       lastError = err;
       // Retry only on transient/overload conditions; fail fast on auth errors.
@@ -102,4 +127,4 @@ async function getAIhealthResponse(userMessage) {
   throw lastError || new Error("Gemini request failed");
 }
 
-module.exports = { getAIhealthResponse };
+module.exports = { getAIhealthResponse, buildUserParts };

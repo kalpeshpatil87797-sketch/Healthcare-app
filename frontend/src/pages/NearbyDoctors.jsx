@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import Layout from "../components/Layout";
 import AppointmentModal from "../components/AppointmentModal";
+import DoctorMap from "../components/DoctorMap";
+import { formatApptDate } from "../utils/appointmentDate";
+import { SPECIALTIES } from "../utils/specialties";
 import "./ProviderPages.css";
 
 const API_BASE = "http://localhost:8001";
@@ -14,6 +17,7 @@ function authConfig() {
 function NearbyDoctors() {
   const [doctors, setDoctors] = useState([]);
   const [appointments, setAppointments] = useState([]);
+  const [doctorName, setDoctorName] = useState("");
   const [specialty, setSpecialty] = useState("");
   const [location, setLocation] = useState("");
   const [coordinates, setCoordinates] = useState(null);
@@ -25,10 +29,15 @@ function NearbyDoctors() {
   const [searched, setSearched] = useState(false);
   const [bookingDoctor, setBookingDoctor] = useState(null);
   const [connectingId, setConnectingId] = useState("");
+  const [actingAppointmentId, setActingAppointmentId] = useState("");
+  const [doctorView, setDoctorView] = useState("list");
+  const doctorsRequestInFlight = useRef(false);
+  const appointmentsRequestInFlight = useRef(false);
+  const refreshFunctions = useRef({});
 
   async function connectAndBook(doctor) {
     setConnectingId(String(doctor._id));
-    setMessage("");
+    setError("");
     try {
       const token = localStorage.getItem("token");
       await axios.post(
@@ -38,13 +47,15 @@ function NearbyDoctors() {
       );
       setBookingDoctor(doctor);
     } catch (err) {
-      setMessage(err.response?.data?.error ?? "Could not connect with this doctor.");
+      setError(err.response?.data?.error ?? "Could not connect with this doctor.");
     } finally {
       setConnectingId("");
     }
   }
 
   async function loadAppointments() {
+    if (appointmentsRequestInFlight.current) return;
+    appointmentsRequestInFlight.current = true;
     setLoadingAppointments(true);
     setAppointmentError("");
     try {
@@ -53,11 +64,14 @@ function NearbyDoctors() {
     } catch (err) {
       setAppointmentError(err.response?.data?.error ?? "Failed to load your appointments.");
     } finally {
+      appointmentsRequestInFlight.current = false;
       setLoadingAppointments(false);
     }
   }
 
   async function searchDoctors(overrides = {}) {
+    if (doctorsRequestInFlight.current) return;
+    doctorsRequestInFlight.current = true;
     const selectedLocation = overrides.location ?? location;
     const selectedCoordinates =
       Object.prototype.hasOwnProperty.call(overrides, "coordinates")
@@ -68,6 +82,7 @@ function NearbyDoctors() {
     setSearched(true);
     try {
       const params = {};
+      if (doctorName.trim()) params.name = doctorName.trim();
       if (specialty) params.specialty = specialty;
       if (selectedLocation.trim()) {
         params.location = selectedLocation.trim();
@@ -83,15 +98,23 @@ function NearbyDoctors() {
       const response = await axios.get(endpoint, { ...authConfig(), params });
       setDoctors(response.data?.doctors ?? []);
     } catch (err) {
-      setDoctors([]);
       setError(err.response?.data?.error ?? "Failed to search doctors. Please try again.");
     } finally {
+      doctorsRequestInFlight.current = false;
       setLoadingDoctors(false);
     }
   }
 
   useEffect(() => {
+    refreshFunctions.current = {
+      searchDoctors: () => searchDoctors(),
+      loadAppointments,
+    };
+  });
+
+  useEffect(() => {
     let active = true;
+    doctorsRequestInFlight.current = true;
     axios.get(`${API_BASE}/doctor/search`, authConfig())
       .then((response) => {
         if (active) {
@@ -106,8 +129,10 @@ function NearbyDoctors() {
         }
       })
       .finally(() => {
+        doctorsRequestInFlight.current = false;
         if (active) setLoadingDoctors(false);
       });
+    appointmentsRequestInFlight.current = true;
     axios.get(`${API_BASE}/appointment/mine`, authConfig())
       .then((response) => {
         if (active) setAppointments(response.data?.appointments ?? []);
@@ -118,10 +143,25 @@ function NearbyDoctors() {
         }
       })
       .finally(() => {
+        appointmentsRequestInFlight.current = false;
         if (active) setLoadingAppointments(false);
       });
     return () => {
       active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshVisiblePage = () => {
+      if (document.visibilityState !== "visible") return;
+      refreshFunctions.current.searchDoctors();
+      refreshFunctions.current.loadAppointments();
+    };
+    window.addEventListener("focus", refreshVisiblePage);
+    document.addEventListener("visibilitychange", refreshVisiblePage);
+    return () => {
+      window.removeEventListener("focus", refreshVisiblePage);
+      document.removeEventListener("visibilitychange", refreshVisiblePage);
     };
   }, []);
 
@@ -149,23 +189,6 @@ function NearbyDoctors() {
       },
       { timeout: 10000 }
     );
-  }
-
-  async function handleStartBooking(doctor) {
-    setConnectingDoctorId(String(doctor._id));
-    setError("");
-    try {
-      await axios.post(
-        `${API_BASE}/doctor/connect`,
-        { doctorId: doctor._id },
-        authConfig()
-      );
-      setBookingDoctor(doctor);
-    } catch (err) {
-      setError(err.response?.data?.error ?? "Could not connect with this doctor.");
-    } finally {
-      setConnectingDoctorId("");
-    }
   }
 
   async function updatePatientAppointment(id, action) {
@@ -214,6 +237,14 @@ function NearbyDoctors() {
           }}
         >
           <label>
+            Doctor name
+            <input
+              value={doctorName}
+              onChange={(event) => setDoctorName(event.target.value)}
+              placeholder="Search by doctor name"
+            />
+          </label>
+          <label>
             Specialty
             <select value={specialty} onChange={(event) => setSpecialty(event.target.value)}>
               <option value="">All specialties</option>
@@ -247,7 +278,42 @@ function NearbyDoctors() {
         </form>
 
         {error && <p className="provider-error" role="alert">{error}</p>}
-        {loadingDoctors ? (
+        <div className="doctor-view-toolbar" aria-label="Doctor results view">
+          <p>{loadingDoctors ? "Searching doctors…" : `${doctors.length} available doctor${doctors.length === 1 ? "" : "s"}`}</p>
+          <div role="group" aria-label="Choose doctor results view">
+            <button
+              type="button"
+              className="appointment-secondary-button"
+              onClick={() => searchDoctors()}
+              disabled={loadingDoctors}
+            >
+              {loadingDoctors ? "Refreshing…" : "Refresh doctors"}
+            </button>
+            <button
+              type="button"
+              className={doctorView === "list" ? "appointment-secondary-button is-selected" : "appointment-secondary-button"}
+              aria-pressed={doctorView === "list"}
+              onClick={() => setDoctorView("list")}
+            >
+              List
+            </button>
+            <button
+              type="button"
+              className={doctorView === "map" ? "appointment-secondary-button is-selected" : "appointment-secondary-button"}
+              aria-pressed={doctorView === "map"}
+              onClick={() => setDoctorView("map")}
+            >
+              Map
+            </button>
+          </div>
+        </div>
+        {doctorView === "map" ? (
+          <DoctorMap
+            doctors={doctors}
+            onBookDoctor={connectAndBook}
+            loading={loadingDoctors}
+          />
+        ) : loadingDoctors ? (
           <p className="provider-status" role="status">Loading available doctors...</p>
         ) : doctors.length === 0 ? (
           <div className="appointment-empty">
@@ -260,28 +326,20 @@ function NearbyDoctors() {
               <article key={doctor._id} className="provider-result appointment-doctor-card">
                 <div className="provider-result-mark" aria-hidden="true">+</div>
                 <div className="provider-result-details">
-                  <h2>{d.name}</h2>
-                  <p className="provider-specialty">{d.specialist}</p>
-                  <p className="provider-meta">{d.clinicName}</p>
-                  <p className="provider-meta">{d.clinicLocation}</p>
-                  {d.degree && <p className="provider-meta">{d.degree}</p>}
+                  <h2>{doctor.name}</h2>
+                  <p className="provider-specialty">{doctor.specialist}</p>
+                  <p className="provider-meta">{doctor.clinicName}</p>
+                  <p className="provider-meta">{doctor.clinicLocation}</p>
+                  {doctor.degree && <p className="provider-meta">{doctor.degree}</p>}
                   <button
                     type="button"
                     className="provider-primary-button"
-                    onClick={() => connectAndBook(d)}
-                    disabled={connectingId === String(d._id)}
+                    onClick={() => connectAndBook(doctor)}
+                    disabled={connectingId === String(doctor._id)}
                   >
-                    {connectingId === String(d._id) ? "Connecting…" : "Connect and book"}
+                    {connectingId === String(doctor._id) ? "Connecting…" : "Connect and book"}
                   </button>
                 </div>
-                <button
-                  type="button"
-                  className="provider-primary-button appointment-book-button"
-                  onClick={() => handleStartBooking(doctor)}
-                  disabled={Boolean(connectingDoctorId)}
-                >
-                  {connectingDoctorId === String(doctor._id) ? "Preparing..." : "Book appointment"}
-                </button>
               </article>
             ))}
           </div>

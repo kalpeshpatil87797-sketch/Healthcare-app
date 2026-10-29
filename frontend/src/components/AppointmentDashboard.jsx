@@ -68,7 +68,7 @@ function AppointmentItem({ appointment, doctorView, onCancel, onComplete, onResc
   );
 }
 
-export function AvailabilitySettings({ onUpdated = () => {} }) {
+export function AvailabilitySettings({ onUpdated = () => {}, refreshKey = 0 }) {
   const [availability, setAvailability] = useState(null);
   const [blockedDate, setBlockedDate] = useState("");
   const [period, setPeriod] = useState({ date: "", startTime: "", endTime: "" });
@@ -94,7 +94,7 @@ export function AvailabilitySettings({ onUpdated = () => {} }) {
         }
       });
     return () => { active = false; };
-  }, []);
+  }, [refreshKey]);
 
   function updateHours(dayOfWeek, field, value) {
     setAvailability((current) => {

@@ -14,6 +14,11 @@ const { restrictToLoggedinUserOnly } = require("../middlewares/auth");
 
 const router = express.Router();
 
+router.use((req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
 router.post("/book", restrictToLoggedinUserOnly, handleBookAppointment);
 router.get("/availability", restrictToLoggedinUserOnly, handleAppointmentAvailability);
 router.get("/mine", restrictToLoggedinUserOnly, handleMyAppointments);

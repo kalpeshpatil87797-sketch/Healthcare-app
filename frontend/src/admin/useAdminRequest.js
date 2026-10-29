@@ -15,6 +15,7 @@ export function useAdminRequest(fetcher, params = {}) {
   const paramsKey = JSON.stringify(params);
   const [result, setResult] = useState(EMPTY_RESULT);
   const [attempt, setAttempt] = useState(0);
+  const requestKey = `${paramsKey}:${attempt}`;
 
   const retry = useCallback(() => {
     setResult(EMPTY_RESULT);
@@ -36,7 +37,7 @@ export function useAdminRequest(fetcher, params = {}) {
         if (signal.aborted) return;
 
         setResult({
-          key: paramsKey,
+          key: requestKey,
           data: getPayloadData(payload),
           meta: payload?.meta ?? null,
           error: null,
@@ -48,21 +49,20 @@ export function useAdminRequest(fetcher, params = {}) {
           return;
         }
 
-        setResult({
-          key: paramsKey,
-          data: null,
-          meta: null,
-          error:
-            error instanceof AdminRequestError
-              ? error
-              : new AdminRequestError("network"),
-        });
+        setResult((current) => ({
+          key: requestKey,
+          data: current.data,
+          meta: current.meta,
+          error: error instanceof AdminRequestError
+            ? error
+            : new AdminRequestError("network"),
+        }));
       });
 
     return () => controller.abort();
-  }, [fetcher, paramsKey, attempt]);
+  }, [fetcher, paramsKey, requestKey]);
 
-  const isPending = result.key !== paramsKey;
+  const isPending = result.key !== requestKey;
   const hasData = result.data !== null;
 
   return {

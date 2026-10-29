@@ -13,6 +13,7 @@ const {
   acquireAppointmentSlotLock,
   releaseAppointmentSlotLock,
 } = require("../utils/appointmentSlotLock");
+const { buildClinicLocationVerificationUpdate } = require("../utils/clinicLocationVerification");
 
 const USER_ROLES = User.schema.path("role").enumValues;
 const ACCOUNT_STATUSES = User.schema.path("accountStatus").enumValues;
@@ -515,7 +516,7 @@ async function handleListDoctors(req, res) {
     const [doctors, total] = await Promise.all([
       Doctor.find(query)
         .select(
-          "_id name clinicName degree specialist clinicLocation registeredBy isActive isAvailable approvalStatus submittedAt rejectionReason reviewedAt location createdAt updatedAt"
+          "_id name clinicName degree specialist clinicLocation registeredBy isActive isAvailable approvalStatus locationVerified submittedAt rejectionReason reviewedAt location createdAt updatedAt"
         )
         .sort(sortSpec)
         .skip((page - 1) * limit)
@@ -554,6 +555,7 @@ async function handleListDoctors(req, res) {
             doctor.isAvailable !== false,
         latitude: doctor.location?.coordinates?.[1] ?? null,
         longitude: doctor.location?.coordinates?.[0] ?? null,
+        locationVerified: doctor.locationVerified === true,
         linkedUser: usersByEmail.get(doctor.registeredBy) ?? null,
         createdAt: doctor.createdAt,
         updatedAt: doctor.updatedAt,
@@ -867,7 +869,7 @@ async function handleGetAdminDoctor(req, res) {
 
     const doctor = await Doctor.findById(id)
       .select(
-      "_id name clinicName degree specialist clinicLocation registeredBy isActive isAvailable approvalStatus submittedAt rejectionReason reviewedBy reviewedAt location createdAt updatedAt"
+      "_id name clinicName degree specialist clinicLocation registeredBy isActive isAvailable approvalStatus locationVerified submittedAt rejectionReason reviewedBy reviewedAt location createdAt updatedAt"
       )
       .lean();
 
@@ -908,6 +910,7 @@ async function handleGetAdminDoctor(req, res) {
           doctor.isAvailable !== false,
         latitude: doctor.location?.coordinates?.[1] ?? null,
         longitude: doctor.location?.coordinates?.[0] ?? null,
+        locationVerified: doctor.locationVerified === true,
         linkedUser: linkedUser ?? null,
         activity: { appointments, connections },
         approval: { canReview: approvalStatus === "pending" },
@@ -918,6 +921,84 @@ async function handleGetAdminDoctor(req, res) {
   } catch (err) {
     console.error("Admin doctor detail failed:", err.message);
     return res.status(500).json({ error: "Failed to load doctor details" });
+  }
+}
+
+async function handleUpdateClinicLocationVerification(req, res) {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "Invalid doctor id", code: "INVALID_DOCTOR_ID" });
+  }
+
+  const body = req.body;
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 1 ||
+    typeof body.isVerified !== "boolean"
+  ) {
+    return res.status(400).json({
+      error: "Provide only a boolean isVerified value.",
+      code: "INVALID_LOCATION_VERIFICATION",
+    });
+  }
+
+  try {
+    const doctor = await Doctor.findById(id)
+      .select("_id name location locationVerified")
+      .lean();
+    if (!doctor) {
+      return res.status(404).json({ error: "Doctor not found", code: "DOCTOR_NOT_FOUND" });
+    }
+
+    const result = buildClinicLocationVerificationUpdate(
+      req.currentUser?.role,
+      body.isVerified,
+      doctor.location
+    );
+    if (result.error) {
+      return res.status(result.status).json({
+        error: result.error,
+        code: result.code,
+      });
+    }
+
+    const filter = { _id: doctor._id };
+    if (body.isVerified) {
+      filter["location.type"] = doctor.location.type;
+      filter["location.coordinates"] = doctor.location.coordinates;
+    }
+    const updated = await Doctor.findOneAndUpdate(
+      filter,
+      result.update,
+      { new: true, runValidators: true }
+    )
+      .select("_id location locationVerified")
+      .lean();
+
+    if (!updated) {
+      return res.status(409).json({
+        error: "Clinic coordinates changed while verification was in progress. Refresh and review again.",
+        code: "CLINIC_LOCATION_CHANGED",
+      });
+    }
+
+    console.info(
+      `[admin-audit] action=doctor.location_${body.isVerified ? "verify" : "revoke"} actor=${req.currentUser._id} target=${doctor._id} at=${new Date().toISOString()}`
+    );
+    return res.status(200).json({
+      message: body.isVerified ? "Clinic location verified." : "Clinic location verification revoked.",
+      doctor: {
+        _id: updated._id,
+        locationVerified: updated.locationVerified === true,
+        latitude: updated.location?.coordinates?.[1] ?? null,
+        longitude: updated.location?.coordinates?.[0] ?? null,
+      },
+    });
+  } catch (err) {
+    console.error("Admin clinic location verification failed:", err.message);
+    return res.status(500).json({ error: "Failed to update clinic location verification" });
   }
 }
 
@@ -1243,7 +1324,7 @@ async function handleGetAdminUser(req, res) {
 
     const [doctorProfile, appointmentsAsPatient, patientConnections] = await Promise.all([
       Doctor.findOne({ registeredBy: user.email })
-        .select("_id name clinicName degree specialist clinicLocation isActive isAvailable approvalStatus submittedAt rejectionReason reviewedAt createdAt")
+        .select("_id name clinicName degree specialist clinicLocation location locationVerified isActive isAvailable approvalStatus submittedAt rejectionReason reviewedAt createdAt")
         .sort({ updatedAt: -1, _id: -1 })
         .lean(),
       Appointment.countDocuments({ patientId: user._id }),
@@ -1689,6 +1770,7 @@ module.exports = {
   handleListAppointments,
   handleUpdateAppointmentStatus,
   handleGetAdminDoctor,
+  handleUpdateClinicLocationVerification,
   handleUpdateDoctorApproval,
   handleRemoveDoctor,
   handleGetAdminUser,

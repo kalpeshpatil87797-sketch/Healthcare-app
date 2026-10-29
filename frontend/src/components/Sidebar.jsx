@@ -19,6 +19,12 @@ const DOCTOR_LINKS = [
   { to: "/profile", label: "Profile", icon: "👤" },
 ];
 
+const ADMIN_LINKS = [
+  { to: "/dashboard", label: "Home", icon: "🏠" },
+  { to: "/admin", label: "Admin Dashboard", icon: "⚙" },
+  { to: "/profile", label: "Profile", icon: "👤" },
+];
+
 const ACCOUNT_LINKS = [
   { to: "/dashboard", label: "Home", icon: "🏠" },
   { to: "/profile", label: "Profile", icon: "👤" },
@@ -27,12 +33,6 @@ const ACCOUNT_LINKS = [
 const ROOT_OWNER_LINKS = [
   { to: "/dashboard", label: "Home", icon: "🏠" },
   { to: "/admin", label: "Root Owner Dashboard", icon: "⚙" },
-  { to: "/profile", label: "Profile", icon: "👤" },
-];
-
-const SUPER_ADMIN_LINKS = [
-  { to: "/dashboard", label: "Home", icon: "🏠" },
-  { to: "/admin", label: "Admin Dashboard", icon: "⚙" },
   { to: "/profile", label: "Profile", icon: "👤" },
 ];
 
@@ -45,9 +45,9 @@ function Sidebar({ isOpen, onClose, role }) {
         ? PATIENT_LINKS
         : role === "root_owner"
           ? ROOT_OWNER_LINKS
-          : role === "super_admin"
-            ? SUPER_ADMIN_LINKS
-          : ACCOUNT_LINKS;
+            : role === "admin"
+              ? ADMIN_LINKS
+            : ACCOUNT_LINKS;
 
   function handleLogout() {
     localStorage.removeItem("token");

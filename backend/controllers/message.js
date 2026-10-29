@@ -16,6 +16,7 @@ const {
   ALLOWED_IMAGE_EXTS,
   ALLOWED_DOCUMENT_EXTS,
 } = require("../middlewares/upload");
+const { validateMedicalReport } = require("../utils/medicalReport");
 
 async function getRequesterRole(userEmail) {
   const user = await User.findOne({ email: userEmail }).select("role").lean();
@@ -340,6 +341,55 @@ async function handleSendMessage(req, res) {
   }
 }
 
+async function handleAnalyzeReport(req, res) {
+  try {
+    const file = req.file;
+    if (!file) {
+      return res.status(400).json({ error: "Select a JPG, PNG, or PDF medical report to analyze." });
+    }
+
+    const validation = validateMedicalReport(file);
+    if (validation.error) {
+      return res.status(400).json({ error: validation.error });
+    }
+
+    const text = typeof req.body?.text === "string" ? req.body.text.trim().slice(0, 2000) : "";
+    const senderEmail = req.user.email;
+    const userMessage = await Message.create({
+      senderEmail,
+      text,
+      fileName: path.basename(file.originalname),
+      fileType: validation.type.fileType,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+    });
+
+    let aiMessage = null;
+    let aiError = null;
+    try {
+      const aiText = await getAIhealthResponse(text, {
+        buffer: file.buffer,
+        mimeType: file.mimetype,
+      });
+      aiMessage = await Message.create({
+        senderEmail: "AI Assistant",
+        recipientEmail: senderEmail,
+        text: aiText,
+      });
+    } catch (err) {
+      aiError = "AI report analysis is temporarily unavailable. Please try again.";
+      console.error("AI report analysis failed:", err.status ? `HTTP ${err.status}` : "", err.message);
+    }
+
+    return res.status(201).json({ userMessage, aiMessage, aiError });
+  } catch (err) {
+    console.error("Analyze medical report failed:", err.message);
+    return res.status(500).json({ error: "Failed to analyze medical report" });
+  } finally {
+    if (req.file) req.file.buffer = null;
+  }
+}
+
 async function handleGetMessages(req, res) {
   try {
     if (req.query.doctorId) {
@@ -421,4 +471,4 @@ async function handleGetMessages(req, res) {
   }
 }
 
-module.exports = { handleSendMessage, handleGetMessages };
+module.exports = { handleSendMessage, handleAnalyzeReport, handleGetMessages };

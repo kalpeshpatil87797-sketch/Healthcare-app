@@ -6,6 +6,7 @@ const {
   handleListAppointments,
   handleUpdateAppointmentStatus,
   handleGetAdminDoctor,
+  handleUpdateClinicLocationVerification,
   handleUpdateDoctorApproval,
   handleRemoveDoctor,
   handleGetAdminUser,
@@ -31,6 +32,11 @@ router.patch("/users/:id/status", handleUpdateUserStatus);
 router.patch("/users/:id/role", requireRole("root_owner"), handleUpdateUserRole);
 router.get("/doctors", handleListDoctors);
 router.get("/doctors/:id", handleGetAdminDoctor);
+router.patch(
+  "/doctors/:id/location-verification",
+  requireRole("admin", "root_owner"),
+  handleUpdateClinicLocationVerification
+);
 router.patch("/doctors/:id/approval", handleUpdateDoctorApproval);
 router.patch("/doctors/:id/remove", handleRemoveDoctor);
 router.get("/appointments", handleListAppointments);

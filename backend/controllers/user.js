@@ -3,6 +3,8 @@ const crypto = require("crypto");
 const User = require("../models/user");
 const Doctor = require("../models/doctor");
 const sendEmail = require("../utils/sendEmail");
+const { buildProfileUpdate } = require("../utils/profileUpdate");
+const { nominatimClient } = require("../utils/nominatim");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -268,6 +270,9 @@ module.exports = {
   handleForgotPassword,
   handleResetPassword,
   handleGetProfile,
+  handleUpdateProfile,
+  handleGeocodeClinicLocation,
+  handleReverseGeocodeLocation,
   handleUpdateLocation,
 };
 
@@ -277,26 +282,195 @@ async function handleGetProfile(req, res) {
       .select("_id name email role age phone address location accountStatus createdAt updatedAt")
       .lean();
     if (!user) return res.status(404).json({ error: "User not found" });
-    let speciality = null;
+    let doctorProfile = null;
     const application = await getDoctorApplicationStatus(user.email, user.role);
     const activeRole = getEffectiveRole(user.role, application);
-    if (user.role === "doctor") {
-      const doctor = await Doctor.findOne({ registeredBy: req.user.email })
-        .select("specialist")
+    if (["patient", "doctor"].includes(user.role)) {
+      const doctor = await Doctor.findOne({ registeredBy: user.email })
+        .select("_id name clinicName degree specialist clinicLocation location locationVerified approvalStatus isActive")
         .sort({ updatedAt: -1, _id: -1 })
         .lean();
-      speciality = doctor?.specialist ?? null;
+      if (doctor) {
+        doctorProfile = {
+          _id: doctor._id,
+          name: doctor.name,
+          clinicName: doctor.clinicName,
+          degree: doctor.degree,
+          specialist: doctor.specialist,
+          clinicLocation: doctor.clinicLocation,
+          location: doctor.location,
+          locationVerified: doctor.locationVerified === true,
+          approvalStatus: doctor.approvalStatus ?? "approved",
+          isActive: doctor.isActive !== false,
+        };
+      }
     }
     return res.status(200).json({
       ...user,
       role: activeRole,
       effectiveRole: activeRole,
       doctorAvailability: application.doctorAvailability,
-      speciality,
+      speciality: doctorProfile?.specialist ?? null,
+      doctorProfile,
+      doctorProfileCanEdit: Boolean(
+        ["patient", "doctor"].includes(user.role) &&
+        doctorProfile &&
+        doctorProfile.isActive &&
+        ["approved", "pending"].includes(doctorProfile.approvalStatus)
+      ),
       ...application,
     });
   } catch (err) {
     return res.status(500).json({ error: "Failed to get profile" });
+  }
+}
+
+async function handleUpdateProfile(req, res) {
+  try {
+    const user = await User.findById(req.user._id)
+      .select("_id name email role age phone address accountStatus")
+      .lean();
+    if (!user || user.accountStatus === "suspended") {
+      return res.status(user ? 403 : 404).json({
+        error: user ? "Suspended accounts cannot update their profile." : "User not found",
+      });
+    }
+
+    let doctor = null;
+    if (["patient", "doctor"].includes(user.role)) {
+      doctor = await Doctor.findOne({ registeredBy: user.email })
+        .select("_id registeredBy name clinicLocation location locationVerified approvalStatus isActive")
+        .sort({ updatedAt: -1, _id: -1 })
+        .lean();
+    }
+
+    const update = buildProfileUpdate(req.body, user, doctor);
+    if (update.status) return res.status(update.status).json({ error: update.error });
+
+    if (update.userUpdate) {
+      const updatedUser = await User.findOneAndUpdate(
+        { _id: user._id, accountStatus: { $ne: "suspended" } },
+        update.userUpdate,
+        { new: true, runValidators: true }
+      ).select("_id");
+      if (!updatedUser) {
+        return res.status(409).json({ error: "The account changed. Refresh and try again." });
+      }
+    }
+
+    if (update.doctorUpdate) {
+      const doctorUpdate = await Doctor.findOneAndUpdate(
+        {
+          _id: doctor._id,
+          registeredBy: user.email,
+          isActive: { $ne: false },
+          $or: [
+            { approvalStatus: "approved" },
+            { approvalStatus: "pending" },
+            { approvalStatus: { $exists: false } },
+          ],
+        },
+        update.doctorUpdate,
+        { new: true, runValidators: true }
+      ).select("_id");
+      if (!doctorUpdate) {
+        return res.status(409).json({ error: "The doctor profile changed. Refresh and try again." });
+      }
+    }
+
+    return res.status(200).json({ message: "Profile updated successfully." });
+  } catch (err) {
+    if (err?.name === "ValidationError" || err?.name === "CastError") {
+      return res.status(400).json({ error: "Please provide valid profile details." });
+    }
+    console.error("Profile update failed:", err.message);
+    return res.status(500).json({ error: "Failed to update profile" });
+  }
+}
+
+async function handleGeocodeClinicLocation(req, res) {
+  const lookupController = new AbortController();
+  try {
+    const address = req.body?.address;
+    if (typeof address !== "string" || address.trim().length < 3 || address.trim().length > 300) {
+      return res.status(400).json({ error: "Enter a clinic address between 3 and 300 characters." });
+    }
+
+    const user = await User.findById(req.user._id)
+      .select("_id email role accountStatus")
+      .lean();
+    if (!user || user.accountStatus === "suspended") {
+      return res.status(user ? 403 : 404).json({
+        error: user ? "Suspended accounts cannot resolve clinic locations." : "User not found.",
+      });
+    }
+    if (!["patient", "doctor"].includes(user.role)) {
+      return res.status(403).json({ error: "Clinic location lookup is only available to doctor profiles." });
+    }
+
+    const doctor = await Doctor.findOne({ registeredBy: user.email })
+      .select("_id approvalStatus isActive")
+      .sort({ updatedAt: -1, _id: -1 })
+      .lean();
+    if (
+      !doctor ||
+      doctor.isActive === false ||
+      !["approved", "pending", undefined].includes(doctor.approvalStatus)
+    ) {
+      return res.status(403).json({ error: "This account cannot edit a doctor profile." });
+    }
+
+    req.once?.("aborted", () => lookupController.abort());
+    res.once?.("close", () => {
+      if (!res.writableEnded) lookupController.abort();
+    });
+    const location = await nominatimClient.geocodeAddress(address, {
+      signal: lookupController.signal,
+    });
+    if (!location) {
+      return res.status(200).json({
+        classification: "none",
+        location: null,
+        candidates: [],
+        message: "No reliable clinic or locality match was found. Correct the address or use the current-location option.",
+      });
+    }
+    return res.status(200).json({
+      classification: location.classification,
+      location: location.classification === "none" ? null : location,
+      candidates: location.candidates ?? [location],
+      message: location.classification === "none"
+        ? "Several plausible locations were found. Choose a result on the map or adjust the pin before confirming."
+        : undefined,
+    });
+  } catch (err) {
+    if (lookupController.signal.aborted) return;
+    console.error("Clinic address geocoding failed:", err.message);
+    return res.status(502).json({ error: "Clinic address lookup is temporarily unavailable. Please try again later." });
+  }
+}
+
+async function handleReverseGeocodeLocation(req, res) {
+  const latitude = parseCoordinate(req.body?.latitude, -90, 90);
+  const longitude = parseCoordinate(req.body?.longitude, -180, 180);
+  if (latitude === undefined || longitude === undefined || latitude === null || longitude === null) {
+    return res.status(400).json({ error: "Valid latitude and longitude are required." });
+  }
+
+  const lookupController = new AbortController();
+  try {
+    req.once?.("aborted", () => lookupController.abort());
+    res.once?.("close", () => {
+      if (!res.writableEnded) lookupController.abort();
+    });
+    const address = await nominatimClient.reverseGeocode(latitude, longitude, {
+      signal: lookupController.signal,
+    });
+    return res.status(200).json({ address });
+  } catch (err) {
+    if (lookupController.signal.aborted) return;
+    console.error("Reverse location lookup failed:", err.message);
+    return res.status(502).json({ error: "Location lookup is temporarily unavailable." });
   }
 }
 

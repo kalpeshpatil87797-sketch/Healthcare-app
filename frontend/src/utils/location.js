@@ -4,18 +4,24 @@
 
 export async function reverseGeocode(latitude, longitude) {
   const fallback = `Lat: ${Number(latitude).toFixed(4)}, Lng: ${Number(longitude).toFixed(4)}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-      { headers: { Accept: "application/json" }, signal: controller.signal }
+      "http://localhost:8001/user/location/reverse-geocode",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ latitude, longitude }),
+        signal: controller.signal,
+      }
     );
-    clearTimeout(timer);
     if (!res.ok) return fallback;
     const data = await res.json();
-    return data.display_name || fallback;
+    return data.address || fallback;
   } catch {
     return fallback;
+  } finally {
+    clearTimeout(timer);
   }
 }
