@@ -35,7 +35,7 @@ export default function AdminTopbar({
           ☰
         </button>
         <div className="admin-topbar-heading">
-          <p className="admin-topbar-eyebrow">Healthcare admin</p>
+          <p className="admin-topbar-eyebrow">{roleLabel}</p>
           <span className="admin-topbar-title">{title}</span>
         </div>
       </div>

@@ -13,7 +13,7 @@ function Home() {
   const isPatient = role === "patient";
   const isDoctor = role === "doctor";
   const isCareUser = isPatient || isDoctor;
-  const isPrivilegedAdmin = role === "root_owner" || role === "super_admin";
+  const isPrivilegedAdmin = role === "root_owner" || role === "admin";
 
   useEffect(() => {
     async function fetchMe() {
@@ -24,13 +24,14 @@ function Home() {
         });
         if (res.data?.name) setName(res.data.name);
         const status = res.data?.doctorApprovalStatus;
-        setRole(
-          ["patient", "doctor"].includes(res.data?.role) &&
-            status === "approved" &&
-            res.data?.doctorProfileActive !== false
-            ? "doctor"
-            : "patient"
-        );
+        const reportedRole = res.data?.effectiveRole ?? res.data?.role;
+        const effectiveRole =
+          reportedRole === "doctor" &&
+          ((status && status !== "approved") ||
+            res.data?.doctorProfileActive === false)
+            ? "patient"
+            : reportedRole;
+        setRole(effectiveRole || "unknown");
       } catch {
         // Keep privileged and patient features hidden until the role is known.
       }

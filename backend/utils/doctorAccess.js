@@ -9,6 +9,7 @@ function canSubmitDoctorApplication(role) {
 
 function isDoctorApproved(doctor) {
   return Boolean(doctor) &&
+    doctor.isActive !== false &&
     (doctor.approvalStatus == null || doctor.approvalStatus === "approved");
 }
 
@@ -30,7 +31,7 @@ async function getEffectiveRole(userEmail) {
   if (user.role !== "doctor") return user.role;
 
   const doctor = await Doctor.findOne({ registeredBy: userEmail })
-    .select("approvalStatus")
+    .select("approvalStatus isActive")
     .lean();
   return getEffectiveDoctorRole(user.role, doctor);
 }

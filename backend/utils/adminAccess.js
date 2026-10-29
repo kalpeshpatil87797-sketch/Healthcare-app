@@ -1,4 +1,4 @@
-const ADMIN_DASHBOARD_ROLES = ["root_owner", "super_admin"];
+const ADMIN_DASHBOARD_ROLES = ["root_owner", "admin"];
 
 function canAccessAdminDashboard(role) {
   return ADMIN_DASHBOARD_ROLES.includes(role);

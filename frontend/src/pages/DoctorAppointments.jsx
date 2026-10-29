@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import Layout from "../components/Layout";
+import { AvailabilitySettings } from "../components/AppointmentDashboard";
 import AlternateTimeModal from "../components/AlternateTimeModal";
 import { formatApptDate } from "../utils/appointmentDate";
+import "./Home.css";
 import "./ProviderPages.css";
 
 const API_BASE = "http://localhost:8001";
@@ -227,8 +229,7 @@ function DoctorAppointments() {
                 </h2>
                 <p>
                   Saved setting: {isAvailable ? "Available for booking" : "Not available for booking"}.
-                  Appointment times use the existing morning and afternoon slots.
-                  Custom hours, breaks, and unavailable dates are not supported.
+                  Configure your weekly hours, breaks, and unavailable dates below.
                 </p>
               </div>
               <button
@@ -251,41 +252,44 @@ function DoctorAppointments() {
               <p className="doctor-availability-notice" role="status">{availabilityNotice}</p>
             )}
             {availabilityEditorOpen && (
-              <form
-                id="doctor-availability-editor"
-                className="doctor-availability-editor"
-                onSubmit={saveAvailability}
-              >
-                <label className="doctor-availability-toggle">
-                  <input
-                    type="checkbox"
-                    checked={availabilityDraft}
-                    onChange={(event) => setAvailabilityDraft(event.target.checked)}
-                    disabled={updatingAvailability}
-                  />
-                  <span>Available for patient bookings</span>
-                </label>
-                <div className="doctor-availability-actions">
-                  <button
-                    type="submit"
-                    className="provider-primary-button"
-                    disabled={updatingAvailability || availabilityDraft === isAvailable}
-                  >
-                    {updatingAvailability ? "Saving..." : "Save availability"}
-                  </button>
-                  <button
-                    type="button"
-                    className="appointment-secondary-button"
-                    disabled={updatingAvailability}
-                    onClick={() => {
-                      setAvailabilityDraft(isAvailable);
-                      setAvailabilityEditorOpen(false);
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+              <div id="doctor-availability-editor" className="doctor-availability-editor">
+                <form onSubmit={saveAvailability}>
+                  <label className="doctor-availability-toggle">
+                    <input
+                      type="checkbox"
+                      checked={availabilityDraft}
+                      onChange={(event) => setAvailabilityDraft(event.target.checked)}
+                      disabled={updatingAvailability}
+                    />
+                    <span>Accept patient bookings</span>
+                  </label>
+                  <div className="doctor-availability-actions">
+                    <button
+                      type="submit"
+                      className="provider-primary-button"
+                      disabled={updatingAvailability || availabilityDraft === isAvailable}
+                    >
+                      {updatingAvailability ? "Saving..." : "Save booking status"}
+                    </button>
+                    <button
+                      type="button"
+                      className="appointment-secondary-button"
+                      disabled={updatingAvailability}
+                      onClick={() => {
+                        setAvailabilityDraft(isAvailable);
+                        setAvailabilityEditorOpen(false);
+                      }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </form>
+                <AvailabilitySettings onUpdated={loadAppointments} />
+                <p className="doctor-availability-help">
+                  Changes to your working hours and exceptions update future bookable slots.
+                  Existing appointments are preserved.
+                </p>
+              </div>
             )}
 
             <section className="appointment-list-section" aria-labelledby="upcoming-appointments-title">

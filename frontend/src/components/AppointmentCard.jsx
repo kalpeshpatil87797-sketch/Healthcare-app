@@ -1,8 +1,6 @@
 // Appointment request card rendered inside the EXISTING Doctor Chat for
 // messages with type "appointment". Same card both sides; action buttons
 // only for the doctor on pending requests, status line for the patient.
-import { formatApptDate } from "../utils/appointmentDate";
-
 const STATUS_LABEL = {
   pending: "Pending",
   accepted: "Confirmed",

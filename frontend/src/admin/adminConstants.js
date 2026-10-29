@@ -1,6 +1,12 @@
 export const ADMIN_ROLES = ["admin", "root_owner"];
 export const ROOT_OWNER_ROLE = "root_owner";
 
+export function getAdminRoleLabel(role) {
+  if (role === ROOT_OWNER_ROLE) return "Root Owner";
+  if (role === "super_admin") return "Legacy Super Admin";
+  return "Admin";
+}
+
 export const ROLE_LABELS = {
   patient: "Patient",
   doctor: "Doctor",

@@ -3,8 +3,6 @@ const crypto = require("crypto");
 const User = require("../models/user");
 const Doctor = require("../models/doctor");
 const sendEmail = require("../utils/sendEmail");
-const Doctor = require("../models/doctor");
-const { isDoctorApproved } = require("../utils/doctorAccess");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -34,7 +32,7 @@ async function getDoctorApplicationStatus(email, role) {
   }
 
   const doctor = await Doctor.findOne({ registeredBy: email })
-    .select("approvalStatus isActive rejectionReason submittedAt")
+    .select("approvalStatus isActive isAvailable rejectionReason submittedAt")
     .sort({ updatedAt: -1, _id: -1 })
     .lean();
 
@@ -45,6 +43,7 @@ async function getDoctorApplicationStatus(email, role) {
         ? "approved"
         : null,
     doctorProfileActive: doctor ? doctor.isActive !== false : role === "doctor",
+    doctorAvailability: doctor?.isAvailable ?? false,
     rejectionReason: doctor?.rejectionReason ?? null,
     doctorApplicationSubmittedAt: doctor?.submittedAt ?? null,
   };
@@ -291,6 +290,8 @@ async function handleGetProfile(req, res) {
     return res.status(200).json({
       ...user,
       role: activeRole,
+      effectiveRole: activeRole,
+      doctorAvailability: application.doctorAvailability,
       speciality,
       ...application,
     });

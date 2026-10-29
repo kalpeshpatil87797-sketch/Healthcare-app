@@ -68,7 +68,7 @@ function AppointmentItem({ appointment, doctorView, onCancel, onComplete, onResc
   );
 }
 
-function AvailabilitySettings({ onUpdated }) {
+export function AvailabilitySettings({ onUpdated = () => {} }) {
   const [availability, setAvailability] = useState(null);
   const [blockedDate, setBlockedDate] = useState("");
   const [period, setPeriod] = useState({ date: "", startTime: "", endTime: "" });

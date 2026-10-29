@@ -284,6 +284,7 @@ async function handleSearchDoctors(req, res) {
     }).select("email").lean();
     const query = {
       isAvailable: true,
+      isActive: { $ne: false },
       approvalStatus: { $in: ["approved", null] },
       registeredBy: { $in: activeDoctors.map((user) => user.email) },
     };

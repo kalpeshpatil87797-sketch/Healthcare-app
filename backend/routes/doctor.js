@@ -1,5 +1,12 @@
 const express = require("express");
-const { handleDoctorRegistration, handleNearbyDoctors, handleConnect, handleMyPatients, handleMyDoctors } = require("../controllers/doctor");
+const {
+  handleDoctorRegistration,
+  handleNearbyDoctors,
+  handleUpdateAvailability,
+  handleConnect,
+  handleMyPatients,
+  handleMyDoctors,
+} = require("../controllers/doctor");
 const {
   handleGetDoctorAvailability,
   handleGetMyDoctorAvailability,
@@ -13,6 +20,7 @@ router.post("/register", restrictToLoggedinUserOnly, handleDoctorRegistration);
 router.get("/nearby", restrictToLoggedinUserOnly, handleNearbyDoctors);
 router.get("/availability", restrictToLoggedinUserOnly, handleGetMyDoctorAvailability);
 router.put("/availability", restrictToLoggedinUserOnly, handleUpdateDoctorAvailability);
+router.patch("/availability", restrictToLoggedinUserOnly, handleUpdateAvailability);
 router.get("/:id/availability", restrictToLoggedinUserOnly, handleGetDoctorAvailability);
 router.post("/connect", restrictToLoggedinUserOnly, handleConnect);
 router.get("/my-patients", restrictToLoggedinUserOnly, handleMyPatients);

@@ -22,7 +22,7 @@ router.use((req, res, next) => {
   next();
 });
 
-router.use(restrictToLoggedinUserOnly, requireRole("root_owner", "admin"));
+router.use(restrictToLoggedinUserOnly, requireRole(...ADMIN_DASHBOARD_ROLES));
 
 router.get("/stats", handleGetAdminStats);
 router.get("/users", handleListUsers);

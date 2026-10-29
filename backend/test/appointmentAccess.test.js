@@ -45,10 +45,10 @@ test("doctor application status does not rewrite privileged effective roles", ()
   }
 });
 
-test("only Root Owner and legacy Super Admin roles can access the admin dashboard", () => {
+test("admin roles can access the dashboard without granting patient or doctor access", () => {
   assert.equal(canAccessAdminDashboard("root_owner"), true);
-  assert.equal(canAccessAdminDashboard("super_admin"), true);
-  assert.equal(canAccessAdminDashboard("admin"), false);
+  assert.equal(canAccessAdminDashboard("admin"), true);
+  assert.equal(canAccessAdminDashboard("super_admin"), false);
   assert.equal(canAccessAdminDashboard("doctor"), false);
   assert.equal(canAccessAdminDashboard("patient"), false);
 });
@@ -94,4 +94,12 @@ test("only active approved doctors can manage appointment availability", () => {
       `${approvalStatus} applicants must not manage availability`
     );
   }
+  assert.equal(
+    canManageDoctorAvailability(
+      { role: "doctor", accountStatus: "active" },
+      { approvalStatus: "approved", isActive: false }
+    ),
+    false,
+    "inactive doctor profiles must not manage availability"
+  );
 });

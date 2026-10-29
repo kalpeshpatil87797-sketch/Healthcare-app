@@ -7,7 +7,6 @@ const Connection = require("../models/connection");
 const {
   getEffectiveRole,
   getAuthorizedDoctor,
-  isDoctorApproved,
 } = require("../utils/doctorAccess");
 const { getAvailableAppointmentSlots } = require("../utils/appointmentAvailability");
 const {
