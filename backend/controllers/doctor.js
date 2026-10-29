@@ -3,12 +3,15 @@ const Doctor = require("../models/doctor");
 const User = require("../models/user");
 const Connection = require("../models/connection");
 const {
-  getEffectiveRole,
-  getAuthorizedDoctor,
-  isDoctorApproved,
-  canSubmitDoctorApplication,
-  DOCTOR_APPLICATION_ROLES,
-} = require("../utils/doctorAccess");
+  acquireDoctorApplicationLock,
+  releaseDoctorApplicationLock,
+} = require("../utils/doctorApplicationLock");
+const {
+  buildDoctorReapplicationUpdate,
+  canReapplyForDoctorProfile,
+  isApprovedDoctorProfile,
+  isBlockingDoctorApplication,
+} = require("../utils/doctorApplicationStatus");
 
 const SPECIALTIES = [
   "General Physician",
@@ -27,6 +30,29 @@ const SPECIALTIES = [
   "Urologist",
   "Endocrinologist",
 ];
+
+// Missing approvalStatus is legacy data and stays approved.
+const APPROVED_DOCTOR_FILTER = {
+  $or: [{ approvalStatus: "approved" }, { approvalStatus: { $exists: false } }],
+};
+
+function isDoctorApproved(doctor) {
+  return isApprovedDoctorProfile(doctor);
+}
+
+async function getRequesterRole(userEmail) {
+  const user = await User.findOne({ email: userEmail }).select("role").lean();
+  if (!user) return null;
+  if (user.role === "doctor") {
+    const application = await Doctor.findOne({ registeredBy: userEmail })
+      .select("approvalStatus isActive")
+      .sort({ updatedAt: -1, _id: -1 })
+      .lean();
+    if (application) return isDoctorApproved(application) ? "doctor" : "patient";
+    if (user.role === "doctor") return "doctor";
+  }
+  return user.role;
+}
 
 function resolveSpecialty(value) {
   if (value === undefined || value === null || String(value).trim() === "") return undefined;
@@ -50,8 +76,15 @@ async function handleDoctorRegistration(req, res) {
   const specialistValue = specialist ?? specialistType;
 
   try {
-    if (!canSubmitDoctorApplication(req.user.role)) {
-      return res.status(403).json({ error: "This account cannot apply for doctor privileges." });
+    const user = await User.findById(req.user._id).select("_id email role accountStatus").lean();
+    if (!user || !["patient", "doctor"].includes(user.role)) {
+      return res.status(403).json({ error: "Only patient accounts can submit a doctor application." });
+    }
+    if (user.accountStatus === "suspended") {
+      return res.status(403).json({ error: "Suspended accounts cannot submit doctor applications." });
+    }
+    if (typeof isAvailable !== "undefined" && typeof isAvailable !== "boolean") {
+      return res.status(400).json({ error: "Invalid availability setting" });
     }
 
     const lat = parseCoordinate(latitude, -90, 90);
@@ -73,13 +106,17 @@ async function handleDoctorRegistration(req, res) {
       });
     }
 
-    await User.updateOne(
-      {
-        email: req.user.email,
-        role: { $in: DOCTOR_APPLICATION_ROLES },
-      },
-      { $set: { role: "doctor" } }
-    );
+    try {
+      const existingApplications = await Doctor.find({ registeredBy: user.email })
+        .select("_id approvalStatus isActive")
+        .sort({ updatedAt: -1, _id: -1 })
+        .lean();
+      if (existingApplications.some(isBlockingDoctorApplication)) {
+        return res.status(409).json({
+          error: "A doctor application is already pending or approved.",
+          code: "DOCTOR_APPLICATION_EXISTS",
+        });
+      }
 
       const existingApplication = existingApplications[0];
       if (existingApplication && !canReapplyForDoctorProfile(existingApplication)) {
@@ -178,14 +215,10 @@ async function handleNearbyDoctors(req, res) {
       return res.status(400).json({ error: "Invalid specialty" });
     }
 
-    const activeDoctors = await User.find({
-      role: "doctor",
-      accountStatus: { $ne: "suspended" },
-    }).select("email").lean();
     const matchQuery = {
       isAvailable: true,
-      approvalStatus: { $in: ["approved", null] },
-      registeredBy: { $in: activeDoctors.map((user) => user.email) },
+      isActive: { $ne: false },
+      ...APPROVED_DOCTOR_FILTER,
     };
     if (specialty !== undefined) {
       matchQuery.specialist = { $regex: `^${escapeRegExp(specialty)}$`, $options: "i" };
@@ -236,86 +269,18 @@ async function handleNearbyDoctors(req, res) {
   }
 }
 
-async function handleSearchDoctors(req, res) {
-  try {
-    const specialty = resolveSpecialty(req.query.specialty);
-    if (specialty === null) {
-      return res.status(400).json({ error: "Invalid specialty" });
-    }
-
-    const location =
-      typeof req.query.location === "string" ? req.query.location.trim().slice(0, 100) : "";
-    const activeDoctors = await User.find({
-      role: "doctor",
-      accountStatus: { $ne: "suspended" },
-    }).select("email").lean();
-    const query = {
-      isAvailable: true,
-      approvalStatus: { $in: ["approved", null] },
-      registeredBy: { $in: activeDoctors.map((user) => user.email) },
-    };
-    if (specialty !== undefined) {
-      query.specialist = { $regex: `^${escapeRegExp(specialty)}$`, $options: "i" };
-    }
-    if (location) {
-      query.clinicLocation = { $regex: escapeRegExp(location), $options: "i" };
-    }
-
-    const doctors = await Doctor.find(query)
-      .select("_id name clinicName degree specialist clinicLocation isAvailable")
-      .sort({ name: 1 })
-      .limit(50)
-      .lean();
-    return res.status(200).json({ count: doctors.length, doctors });
-  } catch (err) {
-    console.error("Search doctors failed:", err.message);
-    return res.status(500).json({ error: "Failed to search doctors" });
-  }
-}
-
-async function handleUpdateAvailability(req, res) {
-  try {
-    if (typeof req.body?.isAvailable !== "boolean") {
-      return res.status(400).json({ error: "isAvailable must be a boolean" });
-    }
-    const doctor = await getAuthorizedDoctor(req.user.email);
-    if (!doctor) {
-      return res.status(403).json({ error: "Only approved doctors can manage availability" });
-    }
-
-    const updated = await Doctor.findOneAndUpdate(
-      { _id: doctor._id, registeredBy: req.user.email },
-      { $set: { isAvailable: req.body.isAvailable } },
-      { new: true, runValidators: true }
-    ).select("_id isAvailable").lean();
-    if (!updated) {
-      return res.status(404).json({ error: "Doctor profile not found" });
-    }
-    return res.status(200).json({ isAvailable: updated.isAvailable });
-  } catch (err) {
-    console.error("Update doctor availability failed:", err.message);
-    return res.status(500).json({ error: "Failed to update doctor availability" });
-  }
-}
-
-module.exports = {
-  handleDoctorRegistration,
-  handleNearbyDoctors,
-  handleSearchDoctors,
-  handleUpdateAvailability,
-  handleConnect,
-  handleMyPatients,
-  handleMyDoctors,
-  SPECIALTIES,
-};
+module.exports = { handleDoctorRegistration, handleNearbyDoctors, handleConnect, handleMyPatients, handleMyDoctors, SPECIALTIES };
 
 async function getOwnDoctor(userEmail) {
-  return getAuthorizedDoctor(userEmail);
+  return Doctor.findOne({ registeredBy: userEmail })
+    .sort({ updatedAt: -1, _id: -1 })
+    .lean();
 }
 
 async function handleConnect(req, res) {
   try {
-    if ((await getEffectiveRole(req.user.email)) !== "patient") {
+    const role = await getRequesterRole(req.user.email);
+    if (role !== "patient") {
       return res.status(403).json({ error: "Only patients can connect with doctors" });
     }
 
@@ -333,19 +298,15 @@ async function handleConnect(req, res) {
       return res.status(404).json({ error: "Doctor not found" });
     }
     // Only approved doctors can receive new connections.
-    if (!isDoctorApproved(doctor) || doctor.isAvailable !== true) {
+    if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
       return res.status(403).json({ error: "This doctor is not currently available." });
     }
     // A suspended doctor must not receive new connections.
     if (doctor.registeredBy) {
-      const doctorUser = await User.findOne({
-        email: doctor.registeredBy,
-        role: "doctor",
-        accountStatus: { $ne: "suspended" },
-      })
-        .select("_id")
+      const doctorUser = await User.findOne({ email: doctor.registeredBy })
+        .select("accountStatus")
         .lean();
-      if (!doctorUser) {
+      if (doctorUser?.accountStatus === "suspended") {
         return res.status(403).json({ error: "This doctor is currently unavailable." });
       }
     }
@@ -362,9 +323,13 @@ async function handleConnect(req, res) {
 
 async function handleMyPatients(req, res) {
   try {
+    const role = await getRequesterRole(req.user.email);
+    if (role !== "doctor") {
+      return res.status(403).json({ error: "Only doctors can access patient connections" });
+    }
     const doctor = await getOwnDoctor(req.user.email);
     if (!doctor) {
-      return res.status(403).json({ error: "Only doctors can access patient connections" });
+      return res.status(404).json({ error: "Doctor profile not found" });
     }
     if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
       return res.status(403).json({ error: "Your doctor profile is not approved for patient access." });
@@ -390,7 +355,8 @@ async function handleMyPatients(req, res) {
 
 async function handleMyDoctors(req, res) {
   try {
-    if ((await getEffectiveRole(req.user.email)) !== "patient") {
+    const role = await getRequesterRole(req.user.email);
+    if (role !== "patient") {
       return res.status(403).json({ error: "Only patients can access doctor connections" });
     }
 

@@ -5,8 +5,10 @@ const Doctor = require("../models/doctor");
 const Appointment = require("../models/appointment");
 const Connection = require("../models/connection");
 const AdminActionLock = require("../models/adminActionLock");
-const { syncAppointmentMessage } = require("./appointment");
-const { canAccessAdminDashboard } = require("../utils/adminAccess");
+const {
+  populateAppointmentSafely,
+  syncAppointmentMessageSafely,
+} = require("./appointment");
 const {
   acquireAppointmentSlotLock,
   releaseAppointmentSlotLock,
@@ -1575,7 +1577,7 @@ async function handleUpdateUserStatus(req, res) {
       .select("_id role accountStatus")
       .lean();
 
-    if (!actor || !canAccessAdminDashboard(actor.role)) {
+    if (!actor || !["root_owner", "admin"].includes(actor.role)) {
       return res.status(403).json({ error: "Forbidden", code: "FORBIDDEN" });
     }
 

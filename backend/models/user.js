@@ -9,10 +9,18 @@ const userSchema = new mongoose.Schema(
     age: { type: Number, required: true },
     phone: { type: String, required: true },
     address: { type: String, required: true },
-    role: {
+    // super_admin remains a legacy value so unmigrated records remain readable.
+    // It is intentionally not accepted by any dashboard role transition.
+    role: { type: String, enum: ["patient", "doctor", "admin", "root_owner", "super_admin"], default: "patient" },
+    roleBeforeAdmin: {
       type: String,
-      enum: ["patient", "doctor", "admin", "root_owner", "super_admin"],
-      default: "patient",
+      enum: ["patient", "doctor"],
+      select: false,
+    },
+    roleBeforeSuperAdmin: {
+      type: String,
+      enum: ["patient", "doctor"],
+      select: false,
     },
     accountStatus: {
       type: String,

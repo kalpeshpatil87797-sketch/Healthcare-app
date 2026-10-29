@@ -5,12 +5,6 @@ const Doctor = require("../models/doctor");
 const User = require("../models/user");
 const Connection = require("../models/connection");
 const {
-  getEffectiveRole,
-  getAuthorizedDoctor,
-  isDoctorApproved,
-} = require("../utils/doctorAccess");
-const { getAvailableAppointmentSlots } = require("../utils/appointmentAvailability");
-const {
   acquireAppointmentSlotLock,
   releaseAppointmentSlotLock,
 } = require("../utils/appointmentSlotLock");
@@ -21,6 +15,32 @@ const {
   validateAvailability,
 } = require("../utils/appointmentAvailability");
 const { isApprovedDoctorProfile } = require("../utils/doctorApplicationStatus");
+
+// Fresh role lookup — the JWT role can go stale after doctor registration,
+// so the database is the authority (same pattern as controllers/message.js).
+async function getRequesterRole(userEmail) {
+  const user = await User.findOne({ email: userEmail }).select("role").lean();
+  if (!user) return null;
+  if (user.role === "doctor") {
+    const application = await Doctor.findOne({ registeredBy: userEmail })
+      .select("approvalStatus isActive")
+      .sort({ updatedAt: -1, _id: -1 })
+      .lean();
+    if (application) return isDoctorApproved(application) ? "doctor" : "patient";
+    if (user.role === "doctor") return "doctor";
+  }
+  return user.role;
+}
+
+async function getOwnDoctor(userEmail) {
+  return Doctor.findOne({ registeredBy: userEmail })
+    .sort({ updatedAt: -1, _id: -1 })
+    .lean();
+}
+
+function isDoctorApproved(doctor) {
+  return isApprovedDoctorProfile(doctor);
+}
 
 // Strict YYYY-MM-DD calendar date. Returns the normalized string, or null
 // when malformed/impossible. No timezone conversion: the picked calendar
@@ -382,7 +402,7 @@ async function handleUpdateDoctorAvailability(req, res) {
 // POST /appointment/book — creates an immediately confirmed booking.
 async function handleBookAppointment(req, res) {
   try {
-    const role = await getEffectiveRole(req.user.email);
+    const role = await getRequesterRole(req.user.email);
     if (role !== "patient") {
       return res.status(403).json({ error: "Only patients can book appointments" });
     }
@@ -411,16 +431,15 @@ async function handleBookAppointment(req, res) {
     }
 
     // Only approved doctors can receive new bookings.
-    if (!isDoctorApproved(doctor) || doctor.isAvailable !== true) {
+    if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
       return res.status(403).json({ error: "This doctor is not currently available." });
     }
 
-    const doctorUser = await User.findOne({
-      email: doctor.registeredBy,
-      role: "doctor",
-      accountStatus: { $ne: "suspended" },
-    }).select("_id").lean();
-    if (!doctorUser) {
+    // A suspended doctor must not receive new bookings.
+    const doctorUser = await User.findOne({ email: doctor.registeredBy })
+      .select("accountStatus")
+      .lean();
+    if (!doctorUser || doctorUser.accountStatus === "suspended") {
       return res.status(403).json({ error: "This doctor is currently unavailable." });
     }
 
@@ -564,62 +583,10 @@ async function handleBookAppointment(req, res) {
   }
 }
 
-// GET /appointment/availability — return free choices from the existing
-// fixed schedule without exposing any other patient's appointment details.
-async function handleAppointmentAvailability(req, res) {
-  try {
-    if ((await getEffectiveRole(req.user.email)) !== "patient") {
-      return res.status(403).json({ error: "Only patients can view appointment availability" });
-    }
-
-    const { doctorId } = req.query;
-    const date = normalizeDate(req.query.date);
-    if (!doctorId || !date) {
-      return res.status(400).json({ error: "doctorId and a valid date are required" });
-    }
-    if (!mongoose.Types.ObjectId.isValid(doctorId)) {
-      return res.status(404).json({ error: "Doctor not found" });
-    }
-    if (date < serverTodayStr()) {
-      return res.status(400).json({ error: "Appointment date cannot be in the past" });
-    }
-
-    const doctor = await Doctor.findById(doctorId)
-      .select("_id registeredBy approvalStatus isAvailable")
-      .lean();
-    if (!doctor || !isDoctorApproved(doctor) || doctor.isAvailable !== true) {
-      return res.status(404).json({ error: "Doctor is not available for appointments" });
-    }
-    const doctorUser = await User.findOne({
-      email: doctor.registeredBy,
-      role: "doctor",
-      accountStatus: { $ne: "suspended" },
-    }).select("_id").lean();
-    if (!doctorUser) {
-      return res.status(404).json({ error: "Doctor is not available for appointments" });
-    }
-
-    const appointments = await Appointment.find({
-      doctorId: doctor._id,
-      $or: [
-        { appointmentDate: date, status: { $in: ["pending", "accepted"] } },
-        { alternateDate: date, status: "accepted" },
-      ],
-    }).select("appointmentTime alternateTime status appointmentDate alternateDate").lean();
-    return res.status(200).json({
-      date,
-      availableSlots: getAvailableAppointmentSlots(appointments, date),
-    });
-  } catch (err) {
-    console.error("Get appointment availability failed:", err.message);
-    return res.status(500).json({ error: "Failed to get appointment availability" });
-  }
-}
-
 // GET /appointment/mine — logged-in patient's own appointments.
 async function handleMyAppointments(req, res) {
   try {
-    const role = await getEffectiveRole(req.user.email);
+    const role = await getRequesterRole(req.user.email);
     if (role !== "patient") {
       return res.status(403).json({ error: "Only patients can view their appointments" });
     }
@@ -637,9 +604,13 @@ async function handleMyAppointments(req, res) {
 // GET /appointment/doctor — logged-in doctor's own appointment requests.
 async function handleDoctorAppointments(req, res) {
   try {
-    const doctor = await getAuthorizedDoctor(req.user.email);
-    if (!doctor) {
+    const role = await getRequesterRole(req.user.email);
+    if (role !== "doctor") {
       return res.status(403).json({ error: "Only doctors can view appointment requests" });
+    }
+    const doctor = await getOwnDoctor(req.user.email);
+    if (!doctor) {
+      return res.status(404).json({ error: "Doctor profile not found" });
     }
     if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
       return res.status(403).json({ error: "Your doctor profile is not approved for appointment access." });
@@ -663,9 +634,13 @@ async function handleDoctorAppointments(req, res) {
 // Doctor can only respond to their own pending appointments.
 async function handleRespondAppointment(req, res) {
   try {
-    const doctor = await getAuthorizedDoctor(req.user.email);
-    if (!doctor) {
+    const role = await getRequesterRole(req.user.email);
+    if (role !== "doctor") {
       return res.status(403).json({ error: "Only doctors can respond to appointments" });
+    }
+    const doctor = await getOwnDoctor(req.user.email);
+    if (!doctor) {
+      return res.status(404).json({ error: "Doctor profile not found" });
     }
     if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
       return res.status(403).json({ error: "Your doctor profile is not approved for appointment responses." });
@@ -787,9 +762,9 @@ async function handleRespondAppointment(req, res) {
 // PATCH /appointment/:id/cancel — either participant may cancel an upcoming booking.
 async function handleCancelAppointment(req, res) {
   try {
-    const role = await getEffectiveRole(req.user.email);
-    if (role !== "patient") {
-      return res.status(403).json({ error: "Only patients can cancel appointments" });
+    const role = await getRequesterRole(req.user.email);
+    if (role !== "patient" && role !== "doctor") {
+      return res.status(403).json({ error: "Only patients and assigned doctors can cancel appointments" });
     }
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -1071,7 +1046,7 @@ async function handleCompleteAppointment(req, res) {
 // The original request is kept; the suggested slot becomes the accepted one.
 async function handleAcceptAlternate(req, res) {
   try {
-    const role = await getEffectiveRole(req.user.email);
+    const role = await getRequesterRole(req.user.email);
     if (role !== "patient") {
       return res.status(403).json({ error: "Only patients can accept alternate times" });
     }
@@ -1190,7 +1165,6 @@ module.exports = {
   handleGetMyDoctorAvailability,
   handleUpdateDoctorAvailability,
   handleBookAppointment,
-  handleAppointmentAvailability,
   handleMyAppointments,
   handleDoctorAppointments,
   handleRespondAppointment,

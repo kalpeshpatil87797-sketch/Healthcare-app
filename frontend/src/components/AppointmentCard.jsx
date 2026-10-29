@@ -1,8 +1,6 @@
 // Appointment request card rendered inside the EXISTING Doctor Chat for
 // messages with type "appointment". Same card both sides; action buttons
 // only for the doctor on pending requests, status line for the patient.
-import { formatApptDate } from "../utils/appointmentDate";
-
 const STATUS_LABEL = {
   pending: "Pending",
   accepted: "Confirmed",
@@ -11,6 +9,19 @@ const STATUS_LABEL = {
   cancelled: "Cancelled",
   completed: "Completed",
 };
+
+function formatApptDate(iso) {
+  if (!iso) return "";
+  const parts = String(iso).split("-");
+  if (parts.length !== 3) return String(iso);
+  const [y, m, d] = parts.map(Number);
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  if (!y || !m || !d || !months[m - 1]) return String(iso);
+  return `${d} ${months[m - 1]} ${y}`;
+}
 
 export default function AppointmentCard({
   msg,

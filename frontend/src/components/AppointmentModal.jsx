@@ -1,12 +1,9 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
-import { MORNING_SLOTS, AFTERNOON_SLOTS } from "../utils/appointmentSlots";
 import "../pages/Chat.css";
 
 const API_BASE = "http://localhost:8001";
 
-// STEP 2 — Confirm calls POST /appointment/book and creates a pending
-// appointment. No chat messages are sent here (that is STEP 3).
 // Today's date in local YYYY-MM-DD for the date input minimum (no past dates).
 function todayLocalISO() {
   const d = new Date();
@@ -36,60 +33,47 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
   const [confirmed, setConfirmed] = useState(false);
   const [sending, setSending] = useState(false);
   const [bookError, setBookError] = useState("");
-  const [availability, setAvailability] = useState(null);
-  const availabilityKey = doctor?._id && date ? `${doctor._id}:${date}` : "";
-  const currentAvailability =
-    availability?.key === availabilityKey ? availability : null;
-  const availableSlots = currentAvailability?.slots ?? [];
-  const checkingSlots = Boolean(availabilityKey && !currentAvailability);
-  const availabilityError = currentAvailability?.error ?? "";
+  const [slots, setSlots] = useState([]);
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [availabilityReload, setAvailabilityReload] = useState(0);
+  const [availabilityMessage, setAvailabilityMessage] = useState("");
+  const [visitReason, setVisitReason] = useState("");
+  const [booking, setBooking] = useState(null);
+  const [bookingWarning, setBookingWarning] = useState("");
 
   useEffect(() => {
-    if (!doctor?._id || !date) {
-      return undefined;
-    }
+    if (!date || !doctor?._id) return undefined;
 
-    let active = true;
+    const controller = new AbortController();
     const token = localStorage.getItem("token");
-    axios.get(`${API_BASE}/appointment/availability`, {
-      params: { doctorId: doctor._id, date },
+    axios.get(`${API_BASE}/doctor/${doctor._id}/availability`, {
+      params: { date },
+      signal: controller.signal,
       headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((response) => {
-        if (active) {
-          setAvailability({
-            key: `${doctor._id}:${date}`,
-            slots: response.data?.availableSlots ?? [],
-            error: "",
-          });
-        }
-      })
-      .catch((err) => {
-        if (active) {
-          setAvailability({
-            key: `${doctor._id}:${date}`,
-            slots: [],
-            error:
-              err.response?.data?.error ?? "Failed to check appointment availability.",
-          });
-        }
-      });
+    }).then((response) => {
+      const availableSlots = response.data?.availableSlots ?? [];
+      setSlots(availableSlots);
+      setAvailabilityMessage(
+        availableSlots.length ? "" : "No bookable slots are available on this date."
+      );
+    }).catch((err) => {
+      if (controller.signal.aborted) return;
+      setSlots([]);
+      setAvailabilityMessage(
+        err.response?.data?.error ?? "Could not load current appointment availability."
+      );
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoadingSlots(false);
+    });
 
-    return () => {
-      active = false;
-    };
-  }, [doctor?._id, date]);
+    return () => controller.abort();
+  }, [date, doctor?._id, availabilityReload]);
 
   if (!doctor) return null;
 
   const minDate = todayLocalISO();
   const canConfirm =
-    date !== "" &&
-    slot !== null &&
-    availableSlots.includes(slot) &&
-    !checkingSlots &&
-    !availabilityError &&
-    !sending;
+    date !== "" && slot !== null && visitReason.trim() !== "" && !sending;
 
   async function handleConfirm() {
     if (!canConfirm) return;
@@ -116,11 +100,8 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
       if (err.response?.status === 409) {
         // Occupied slot: stay on the form so another time can be picked.
         setSlot(null);
-        setAvailability((current) =>
-          current?.key === availabilityKey
-            ? { ...current, slots: current.slots.filter((available) => available !== slot) }
-            : current
-        );
+        setLoadingSlots(true);
+        setAvailabilityReload((current) => current + 1);
         setBookError(`${message} Please select another time.`);
       } else {
         setBookError(message);
@@ -226,16 +207,8 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
             {date !== "" && (
               <>
                 <p className="appt-label">Available time slots</p>
-                {checkingSlots && <p role="status">Checking available times...</p>}
-                {availabilityError && <p className="upload-error" role="alert">{availabilityError}</p>}
-                {!checkingSlots && !availabilityError && availableSlots.length === 0 && (
-                  <p role="status">No appointment slots are available on this date.</p>
-                )}
-                {!checkingSlots && !availabilityError && availableSlots.some((s) => MORNING_SLOTS.includes(s)) && (
-                  <>
-                    <p className="appt-slot-group">Morning</p>
-                    <div className="appt-slots">
-                      {MORNING_SLOTS.filter((s) => availableSlots.includes(s)).map((s) => (
+                <div className="appt-slots">
+                  {slots.map((s) => (
                     <button
                       key={s}
                       type="button"
@@ -246,27 +219,13 @@ export default function AppointmentModal({ doctor, onClose, onBooked }) {
                       {s}
                     </button>
                   ))}
-                    </div>
-                  </>
-                )}
-                {!checkingSlots && !availabilityError && availableSlots.some((s) => AFTERNOON_SLOTS.includes(s)) && (
-                  <>
-                    <p className="appt-slot-group">Afternoon</p>
-                    <div className="appt-slots">
-                      {AFTERNOON_SLOTS.filter((s) => availableSlots.includes(s)).map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      className={`appt-slot ${slot === s ? "appt-slot-active" : ""}`}
-                      onClick={() => { setSlot(s); setBookError(""); }}
-                      aria-pressed={slot === s}
-                    >
-                      {s}
-                    </button>
-                  ))}
-                    </div>
-                  </>
-                )}
+                </div>
+                {loadingSlots ? (
+                  <p role="status">Loading available times…</p>
+                ) : null}
+                {!loadingSlots && availabilityMessage ? (
+                  <p role="status">{availabilityMessage}</p>
+                ) : null}
               </>
             )}
 

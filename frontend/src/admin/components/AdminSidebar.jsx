@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { ADMIN_NAV_ITEMS, getAdminRoleLabel } from "../adminConstants";
+import { ADMIN_NAV_ITEMS } from "../adminConstants";
 import { getInitials } from "../format";
 
 function NavIcon({ name }) {
@@ -59,7 +59,6 @@ export default function AdminSidebar({
   adminUser,
   onSignOut,
 }) {
-  const roleLabel = getAdminRoleLabel(adminUser?.role);
   return (
     <>
       {open ? (
@@ -73,7 +72,7 @@ export default function AdminSidebar({
       <aside
         id="admin-sidebar"
         className={`admin-sidebar${open ? " is-open" : ""}`}
-        aria-label={`${roleLabel} navigation`}
+        aria-label="Admin navigation"
       >
         <div className="admin-sidebar-brand">
           <span className="admin-brand-mark" aria-hidden="true">
@@ -81,7 +80,7 @@ export default function AdminSidebar({
           </span>
           <span className="admin-brand-text">
             <span className="admin-brand-name">Healthcare</span>
-            <span className="admin-brand-subtitle">{roleLabel} console</span>
+            <span className="admin-brand-subtitle">Admin console</span>
           </span>
           <button
             type="button"
@@ -119,8 +118,8 @@ export default function AdminSidebar({
               {getInitials(adminUser?.name)}
             </span>
             <span className="admin-sidebar-user-text">
-              <strong>{adminUser?.name || roleLabel}</strong>
-              <span>{adminUser?.email || roleLabel}</span>
+              <strong>{adminUser?.name || "Administrator"}</strong>
+              <span>{adminUser?.email || adminUser?.role || "Administrator"}</span>
             </span>
           </div>
           <button type="button" className="admin-signout" onClick={onSignOut}>

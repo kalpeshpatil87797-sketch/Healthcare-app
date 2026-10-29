@@ -20,11 +20,21 @@ function Login() {
       const res = await axios.post("http://localhost:8001/user/login", formData);
       localStorage.setItem("token", res.data.token);
       const role = res.data?.user?.role;
-      navigate(
-        role === "root_owner" || role === "super_admin"
-          ? "/admin"
-          : "/dashboard"
-      );
+      const doctorApprovalStatus = res.data?.user?.doctorApprovalStatus ?? "approved";
+      const doctorProfileActive = res.data?.user?.doctorProfileActive !== false;
+
+      if (role === "admin" || role === "root_owner") {
+        navigate("/admin");
+        return;
+      }
+      if (
+        ["pending", "rejected"].includes(doctorApprovalStatus) ||
+        (doctorApprovalStatus === "approved" && !doctorProfileActive)
+      ) {
+        navigate("/doctor/verification");
+        return;
+      }
+      navigate("/dashboard");
     } catch (err) {
       setError(err.response?.data?.error ?? "Invalid Username Or Password");
     }

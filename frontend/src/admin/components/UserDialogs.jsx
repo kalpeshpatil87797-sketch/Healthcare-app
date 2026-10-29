@@ -73,11 +73,8 @@ function roleChangeErrorMessage(error) {
 
 export function RoleBadge({ role }) {
   const variant =
-    role === "patient" ||
-    role === "doctor" ||
-    role === "admin" ||
-    role === "root_owner" ||
-    role === "super_admin"
+    role === "patient" || role === "doctor" || role === "admin" ||
+    role === "root_owner" || role === "super_admin"
       ? role.replace(/_/g, "-")
       : "unknown";
 

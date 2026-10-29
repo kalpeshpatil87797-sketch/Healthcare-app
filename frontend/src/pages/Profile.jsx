@@ -35,14 +35,7 @@ function Profile() {
   }, []);
 
   function formatUserType(role) {
-    const labels = {
-      patient: "Patient",
-      doctor: "Doctor",
-      admin: "Admin",
-      root_owner: "Root Owner",
-      super_admin: "Super Admin",
-    };
-    return labels[role] ?? role ?? "Unknown";
+    return role === "doctor" ? "Doctor" : "Patient";
   }
 
   const hasActiveDoctorProfile = Boolean(
@@ -106,7 +99,9 @@ function Profile() {
               <span className="profile-avatar" aria-hidden="true">{profile.name?.trim().charAt(0).toUpperCase()}</span>
               <div>
                 <h2>{profile.name}</h2>
-                <span className="profile-role">{formatUserType(profile.effectiveRole ?? profile.role)}</span>
+                <span className="profile-role">
+                  {formatUserType(hasActiveDoctorProfile ? "doctor" : "patient")}
+                </span>
               </div>
             </div>
             <dl className="profile-details">

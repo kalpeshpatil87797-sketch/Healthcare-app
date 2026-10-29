@@ -13,7 +13,6 @@ const {
   handleUpdateUserRole,
 } = require("../controllers/admin");
 const { restrictToLoggedinUserOnly, requireRole } = require("../middlewares/auth");
-const { ADMIN_DASHBOARD_ROLES } = require("../utils/adminAccess");
 
 const router = express.Router();
 
@@ -22,7 +21,7 @@ router.use((req, res, next) => {
   next();
 });
 
-router.use(restrictToLoggedinUserOnly, requireRole(...ADMIN_DASHBOARD_ROLES));
+router.use(restrictToLoggedinUserOnly, requireRole("root_owner", "admin"));
 
 router.get("/stats", handleGetAdminStats);
 router.get("/users", handleListUsers);
