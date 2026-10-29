@@ -35,7 +35,14 @@ function Profile() {
   }, []);
 
   function formatUserType(role) {
-    return role === "doctor" ? "Doctor" : "Patient";
+    const labels = {
+      patient: "Patient",
+      doctor: "Doctor",
+      admin: "Admin",
+      root_owner: "Root Owner",
+      super_admin: "Super Admin",
+    };
+    return labels[role] ?? role ?? "Unknown";
   }
 
   const hasActiveDoctorProfile = Boolean(

@@ -1,4 +1,5 @@
 import { useLocation } from "react-router-dom";
+import { getAdminRoleLabel } from "../adminConstants";
 import { getInitials } from "../format";
 
 const PAGE_TITLES = {
@@ -17,6 +18,7 @@ export default function AdminTopbar({
 }) {
   const location = useLocation();
   const title = PAGE_TITLES[location.pathname] ?? "Admin console";
+  const roleLabel = getAdminRoleLabel(adminUser?.role);
 
   return (
     <header className="admin-topbar">

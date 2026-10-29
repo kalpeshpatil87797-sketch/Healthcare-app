@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { ADMIN_NAV_ITEMS } from "../adminConstants";
+import { ADMIN_NAV_ITEMS, getAdminRoleLabel } from "../adminConstants";
 import { getInitials } from "../format";
 
 function NavIcon({ name }) {
@@ -59,6 +59,7 @@ export default function AdminSidebar({
   adminUser,
   onSignOut,
 }) {
+  const roleLabel = getAdminRoleLabel(adminUser?.role);
   return (
     <>
       {open ? (
@@ -80,7 +81,7 @@ export default function AdminSidebar({
           </span>
           <span className="admin-brand-text">
             <span className="admin-brand-name">Healthcare</span>
-            <span className="admin-brand-subtitle">Admin console</span>
+            <span className="admin-brand-subtitle">{roleLabel} console</span>
           </span>
           <button
             type="button"

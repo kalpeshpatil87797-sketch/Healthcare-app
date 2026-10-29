@@ -3,6 +3,8 @@ const crypto = require("crypto");
 const User = require("../models/user");
 const Doctor = require("../models/doctor");
 const sendEmail = require("../utils/sendEmail");
+const Doctor = require("../models/doctor");
+const { isDoctorApproved } = require("../utils/doctorAccess");
 
 const JWT_SECRET = process.env.JWT_SECRET;
 

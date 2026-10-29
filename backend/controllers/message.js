@@ -213,7 +213,7 @@ async function handleSendMessage(req, res) {
           if (req.file) fs.unlinkSync(req.file.path);
           return res.status(403).json({ error: "Not authorized for this doctor conversation" });
         }
-        if (!isDoctorApproved(doctor) || doctor.isAvailable === false) {
+        if (!isDoctorApproved(doctor) || doctor.isAvailable !== true) {
           if (req.file) fs.unlinkSync(req.file.path);
           return res.status(403).json({ error: "Your doctor profile is not approved for messaging." });
         }
